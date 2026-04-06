@@ -1,0 +1,12 @@
+{
+  "name": "monitor-proposicoes-cmrj",
+  "version": "1.0.0",
+  "description": "Monitor de proposições legislativas — Câmara Municipal do Rio de Janeiro",
+  "main": "monitor.js",
+  "scripts": {
+    "start": "node monitor.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.0"
+  }
+}
