@@ -6,6 +6,8 @@ const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
 const BASE_URL = 'https://aplicnt.camara.rj.gov.br/APL/Legislativos/scpro.nsf';
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+let falhasBusca = 0;
 
 const TIPOS = [
   { sigla: 'PL',   label: 'Proj. de Lei',                    form: 'Internet/LeiInt?OpenForm'       },
@@ -149,6 +151,7 @@ async function buscarTipo(tipo) {
 
     if (!response.ok) {
       console.error(`  ❌ HTTP ${response.status} para ${tipo.sigla}`);
+      falhasBusca += 1;
       return [];
     }
 
@@ -164,6 +167,7 @@ async function buscarTipo(tipo) {
     return lista;
   } catch (err) {
     console.error(`  ❌ Erro ao buscar ${tipo.sigla}: ${err.message}`);
+    falhasBusca += 1;
     return [];
   }
 }
@@ -279,6 +283,10 @@ async function enviarEmail(novas) {
 
   if (todas.length === 0) {
     console.log('⚠️ Nenhuma proposição encontrada. Verifique o portal.');
+    if (falhasBusca > 0) {
+      console.error(`❌ Falha de fonte: ${falhasBusca} tipo(s) tiveram erro de busca.`);
+      process.exit(1);
+    }
     process.exit(0);
   }
 
