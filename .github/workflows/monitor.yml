@@ -35,8 +35,9 @@ jobs:
           EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
           EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
-          NODE_TLS_REJECT_UNAUTHORIZED: '0'
-        run: node monitor.js
+        run: |
+          export NODE_TLS_REJECT_UNAUTHORIZED=0
+          node monitor.js
 
       - name: Salvar estado no repositório
         run: |
