@@ -1,11 +1,14 @@
 const fs = require('fs');
+const path = require('path');
 const nodemailer = require('nodemailer');
 
 const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
+const FIRJAN_DESTINO = process.env.FIRJAN_DESTINO || EMAIL_DESTINO || 'tramitacao@monitorlegislativo.com.br';
 const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
 const BASE_URL = 'https://aplicnt.camara.rj.gov.br/APL/Legislativos/scpro.nsf';
+const LOGO_PATH = path.join(__dirname, 'assets', 'monitor-logo-color.png');
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 let falhasBusca = 0;
 
@@ -47,6 +50,14 @@ function limparHtml(str) {
     .replace(/&quot;/g, '"')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function formatarDataHoraBRT() {
+  return new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
+function formatarDataBRT() {
+  return new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 
 function absolutizarUrl(href) {
@@ -268,12 +279,22 @@ async function enviarEmail(novas) {
   }).join('');
 
   const html = `
-    <div style="font-family:Arial,sans-serif;max-width:960px;margin:0 auto">
-      <h2 style="color:#1a3a5c;border-bottom:2px solid #1a3a5c;padding-bottom:8px">
-        🏛️ CMRJ — ${novas.length} nova(s) proposição(ões)
+    <div style="font-family:Arial,sans-serif;max-width:960px;margin:0 auto;background:#ffffff;color:#111827">
+      <div style="background:#0f3357;padding:22px 24px;border-radius:12px 12px 0 0;color:#ffffff">
+        <img src="cid:monitorLogo" alt="Monitor Legislativo" style="height:58px;vertical-align:middle;margin-right:18px">
+        <span style="font-size:26px;font-weight:700;vertical-align:middle">Monitor Legislativo</span>
+        <div style="font-size:14px;color:#d7e5f2;margin-top:8px">Proposições novas • Câmara Municipal do Rio de Janeiro</div>
+      </div>
+      <div style="border:1px solid #d7dde7;border-top:0;padding:24px;border-radius:0 0 12px 12px">
+      <p style="display:inline-block;background:#e6f1fb;color:#0f3357;padding:6px 14px;border-radius:20px;font-weight:bold;margin:0 0 16px 0">FIRJAN</p>
+      <h2 style="color:#111827;margin:0 0 6px 0;font-size:24px">
+        FIRJAN | Câmara do Rio — Novas proposições
       </h2>
-      <p style="color:#666;margin-top:0">
-        Monitoramento automático — ${new Date().toLocaleString('pt-BR')}
+      <p style="color:#526070;margin:0 0 18px 0">
+        Rodada diária • ${formatarDataHoraBRT()} BRT
+      </p>
+      <p style="background:#eef6ff;border:1px solid #c7ddf2;color:#173d63;padding:12px 14px;border-radius:8px;font-weight:bold">
+        ${novas.length} proposição(ões) nova(s) localizada(s) na Câmara do Rio
       </p>
       <table style="width:100%;border-collapse:collapse;font-size:14px">
         <thead>
@@ -290,17 +311,23 @@ async function enviarEmail(novas) {
       <p style="margin-top:20px;font-size:12px;color:#999">
         Acesse: <a href="https://www.camara.rio/atividade-parlamentar/processo-legislativo/pl">camara.rio</a>
       </p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+      <p style="font-size:12px;color:#64748b;margin:0">
+        Monitor Legislativo — acompanhamento legislativo estadual e municipal. Horário sempre em BRT.
+      </p>
+      </div>
     </div>
   `;
 
   await transporter.sendMail({
-    from: `"Monitor CMRJ" <${EMAIL_REMETENTE}>`,
-    to: EMAIL_DESTINO,
-    subject: `🏛️ CMRJ: ${novas.length} nova(s) proposição(ões) — ${new Date().toLocaleDateString('pt-BR')}`,
+    from: `"Monitor Legislativo" <${EMAIL_REMETENTE}>`,
+    to: FIRJAN_DESTINO,
+    subject: `FIRJAN | Câmara do Rio — Novas proposições — ${formatarDataBRT()}`,
     html,
+    attachments: fs.existsSync(LOGO_PATH) ? [{ filename: 'monitor-logo-color.png', path: LOGO_PATH, cid: 'monitorLogo' }] : [],
   });
 
-  console.log(`✅ Email enviado com ${novas.length} proposições novas.`);
+  console.log(`✅ Email FIRJAN/CMRJ enviado para ${FIRJAN_DESTINO} com ${novas.length} proposições novas.`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
