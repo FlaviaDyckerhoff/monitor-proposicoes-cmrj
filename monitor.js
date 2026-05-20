@@ -49,6 +49,30 @@ function limparHtml(str) {
     .trim();
 }
 
+function absolutizarUrl(href) {
+  if (!href) return '';
+  const limpo = href.replace(/&amp;/g, '&').trim();
+  if (/^https?:\/\//i.test(limpo)) return limpo;
+  if (limpo.startsWith('/')) return 'https://aplicnt.camara.rj.gov.br' + limpo;
+  return BASE_URL + '/' + limpo;
+}
+
+function formatarDataBrasil(data) {
+  const match = String(data || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return data || '-';
+
+  const [, parte1, parte2, ano] = match;
+  const n1 = parseInt(parte1, 10);
+  const n2 = parseInt(parte2, 10);
+
+  // A CMRJ/Domino publica no formato americano MM/DD/AAAA.
+  if (n1 <= 12 && n2 > 12) {
+    return parte2 + '/' + parte1 + '/' + ano;
+  }
+
+  return data;
+}
+
 function extrairProposicoesDaPagina(html, tipo) {
   const proposicoes = [];
 
@@ -78,6 +102,9 @@ function extrairProposicoesDaPagina(html, tipo) {
 
     const codigo = codigoMatch[1];
     const ano = codigo.substring(0, 4);
+
+    const linkMatch = linha.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>\s*\d+\/\d{4}\s*<\/a>/i);
+    const url = linkMatch ? absolutizarUrl(linkMatch[1]) : '';
 
     // Extrai células como texto limpo
     const tds = [];
@@ -109,7 +136,7 @@ function extrairProposicoesDaPagina(html, tipo) {
         for (let j = i + 1; j < tds.length; j++) {
           const dataMatch = tds[j].match(/\d{2}\/\d{2}\/\d{4}/);
           if (dataMatch) {
-            data = dataMatch[0];
+            data = formatarDataBrasil(dataMatch[0]);
             if (tds[j + 1] && tds[j + 1].trim()) {
               autor = tds[j + 1].substring(0, 200);
             }
@@ -130,6 +157,7 @@ function extrairProposicoesDaPagina(html, tipo) {
       autor,
       data,
       ementa,
+      url,
     });
   }
 
@@ -217,18 +245,24 @@ async function enviarEmail(novas) {
         </td>
       </tr>`;
 
-    const rows = grupo.map(p => `
+    const rows = grupo.map(p => {
+      const numero = p.url
+        ? '<a href="' + p.url + '" style="color:#1a3a5c;text-decoration:none"><strong>' + p.numero + '</strong></a>'
+        : '<strong>' + p.numero + '</strong>';
+
+      return `
       <tr>
         <td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px;
           white-space:nowrap">${p.sigla}</td>
         <td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap">
-          <strong>${p.numero}</strong>
+          ${numero}
         </td>
         <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${p.autor}</td>
         <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;
           white-space:nowrap">${p.data}</td>
         <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${p.ementa}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     return header + rows;
   }).join('');
