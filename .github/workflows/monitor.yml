@@ -41,7 +41,7 @@ jobs:
           EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
           EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
-          FIRJAN_DESTINO: tramitacao@monitorlegislativo.com.br
+          FIRJAN_DESTINO: alertas-firjan@monitorlegislativo.com.br
         run: |
           export NODE_TLS_REJECT_UNAUTHORIZED=0
           node monitor.js
