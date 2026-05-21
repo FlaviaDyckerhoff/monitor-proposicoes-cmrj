@@ -369,6 +369,13 @@ async function enviarEmail(novas) {
     novas.forEach(p => idsVistos.add(p.id));
   } else {
     console.log('✅ Sem novidades. Nada a enviar.');
+    if (process.env.ALERTAR_SEM_NOVIDADES === '1') {
+      console.error('❌ Sem proposições novas em dia útil monitorado. Gerando alerta interno.');
+      estado.proposicoes_vistas = Array.from(idsVistos);
+      estado.ultima_execucao = new Date().toISOString();
+      salvarEstado(estado);
+      process.exit(2);
+    }
   }
 
   estado.proposicoes_vistas = Array.from(idsVistos);

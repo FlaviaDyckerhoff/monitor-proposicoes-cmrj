@@ -5,7 +5,7 @@ env:
 
 on:
   schedule:
-    - cron: '0 14 * * *'   # 11:00 BRT
+    - cron: '0 14 * * 1-5'   # 11:00 BRT, segunda a sexta
   workflow_dispatch:
 
 concurrency:
@@ -30,23 +30,31 @@ jobs:
       - name: Instalar dependências
         run: npm install
 
+      - name: Checar calendário operacional
+        id: calendario
+        run: node scripts/should-run.js
+
       - name: Restaurar estado salvo
+        if: steps.calendario.outputs.skip != 'true'
         run: |
           if [ ! -f estado.json ]; then
             echo '{"proposicoes_vistas":[],"ultima_execucao":""}' > estado.json
           fi
 
       - name: Executar monitor
+        if: steps.calendario.outputs.skip != 'true'
         env:
           EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
           EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
           FIRJAN_DESTINO: alertas-firjan@monitorlegislativo.com.br
+          ALERTAR_SEM_NOVIDADES: "1"
         run: |
           export NODE_TLS_REJECT_UNAUTHORIZED=0
           node monitor.js
 
       - name: Salvar estado no repositório
+        if: steps.calendario.outputs.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -54,3 +62,12 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: atualiza estado [skip ci]"
           git pull --rebase origin main
           git push
+
+      - name: Alertar falha interna
+        if: failure() && steps.calendario.outputs.skip != 'true'
+        env:
+          EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
+          EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
+          EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
+          MONITOR_NOME: "FIRJAN CMRJ Proposições Novas"
+        run: node scripts/send-failure-alert.js
