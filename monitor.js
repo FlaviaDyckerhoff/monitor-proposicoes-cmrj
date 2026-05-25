@@ -4,6 +4,7 @@ const nodemailer = require('nodemailer');
 
 const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
 const FIRJAN_DESTINO = process.env.FIRJAN_DESTINO || EMAIL_DESTINO || 'tramitacao@monitorlegislativo.com.br';
+const FIRJAN_ASSUNTO_PREFIXO = process.env.FIRJAN_ASSUNTO_PREFIXO || '';
 const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
@@ -474,7 +475,7 @@ async function enviarEmail(novas) {
   await transporter.sendMail({
     from: '"Monitor Legislativo" <' + EMAIL_REMETENTE + '>',
     to: FIRJAN_DESTINO,
-    subject: 'FIRJAN | CMRJ — Novas proposições da semana — ' + formatarDataBRT(),
+    subject: FIRJAN_ASSUNTO_PREFIXO + 'FIRJAN | CMRJ — Novas proposições da semana — ' + formatarDataBRT(),
     html,
     attachments: fs.existsSync(LOGO_PATH) ? [{ filename: 'monitor-logo-color.png', path: LOGO_PATH, cid: 'monitorLogo' }] : [],
   });
