@@ -49,6 +49,9 @@ jobs:
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
           FIRJAN_DESTINO: alertas-firjan@monitorlegislativo.com.br
           ALERTAR_SEM_NOVIDADES: "1"
+          MONITOR_USER: ${{ secrets.MONITOR_USER }}
+          MONITOR_PASS: ${{ secrets.MONITOR_PASS }}
+          FIRJAN_CLIENTE_ID: "57"
         run: |
           export NODE_TLS_REJECT_UNAUTHORIZED=0
           node monitor.js

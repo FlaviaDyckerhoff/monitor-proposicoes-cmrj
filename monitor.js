@@ -278,9 +278,120 @@ function numeroOrdenavel(numero) {
   return match ? Number(match[0]) : 0;
 }
 
+function statusMonitorBadge(status) {
+  if (status === 'monitorado_firjan') {
+    return '<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">Já FIRJAN</span>';
+  }
+  if (status === 'monitor_outro_cliente') {
+    return '<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#ecfdf3;color:#027a48;border:1px solid #abefc6;white-space:nowrap">No Monitor, não FIRJAN</span>';
+  }
+  if (status === 'fora_base') {
+    return '<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#fffbeb;color:#b54708;border:1px solid #fedf89;white-space:nowrap">Ainda fora da base</span>';
+  }
+  return '<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#f2f4f7;color:#475467;border:1px solid #d0d5dd;white-space:nowrap">A cruzar</span>';
+}
+
+function observacaoFirjan(status) {
+  if (status === 'monitorado_firjan') return 'Já incorporado para FIRJAN';
+  return '';
+}
+
+function normalizarNumeroMonitor(numero) {
+  const match = String(numero || '').match(/\d+/);
+  return match ? match[0] : String(numero || '');
+}
+
+function tipoMonitor(sigla) {
+  if (sigla === 'PELO') return 'PEC';
+  if (sigla === 'IND-L') return 'IND';
+  if (sigla && sigla.startsWith('REQ')) return 'REQ';
+  return sigla || '';
+}
+
+async function loginMonitor() {
+  const user = process.env.MONITOR_USER || '';
+  const pass = process.env.MONITOR_PASS || '';
+  const monitorUrl = process.env.MONITOR_URL || 'https://monitorlegislativo.com.br';
+  if (!user || !pass) return '';
+
+  const resp = await fetch(monitorUrl + '/app/entrar/entra.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Referer': monitorUrl + '/app/entrar/',
+    },
+    body: new URLSearchParams({ usuario: user, senha: pass }),
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15000),
+  });
+
+  const cookie = resp.headers.get('set-cookie') || '';
+  return cookie.split(',').map(part => part.split(';')[0].trim()).filter(Boolean).join('; ');
+}
+
+async function buscarMonitorItem(item, cookie, codCliente) {
+  if (!cookie) return null;
+
+  const monitorUrl = process.env.MONITOR_URL || 'https://monitorlegislativo.com.br';
+  const params = new URLSearchParams({
+    numero: normalizarNumeroMonitor(item.numero),
+    ano: String(item.ano || '').slice(0, 4),
+    casa: 'RJ',
+    tipo: tipoMonitor(item.sigla),
+    texto: '',
+    status: '',
+    municipio: 'Rio de Janeiro',
+    sem_cliente: 'false',
+    tempo_real: 'false',
+    cod_cliente: codCliente || '',
+    order_type: '',
+  });
+
+  const resp = await fetch(monitorUrl + '/app/proposicoes2/estados-municipios/lista.php?' + params.toString(), {
+    headers: { Cookie: cookie, Accept: 'application/json' },
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!resp.ok) return null;
+  const data = await resp.json().catch(() => null);
+  return Array.isArray(data) && data.length ? data[0] : null;
+}
+
+async function enriquecerComMonitor(proposicoes) {
+  let cookie = '';
+  try {
+    cookie = await loginMonitor();
+  } catch (err) {
+    console.warn('⚠️ Não foi possível autenticar no Monitor para cruzamento: ' + err.message);
+  }
+
+  if (!cookie) {
+    console.warn('⚠️ Cruzamento com Monitor não executado: MONITOR_USER/MONITOR_PASS ausentes ou login sem cookie.');
+    return proposicoes.map(p => ({ ...p, status_firjan: 'pendente_cruzamento' }));
+  }
+
+  const enriquecidas = [];
+  for (const item of proposicoes) {
+    try {
+      const geral = await buscarMonitorItem(item, cookie, '');
+      const firjan = await buscarMonitorItem(item, cookie, process.env.FIRJAN_CLIENTE_ID || '57');
+      let status = 'fora_base';
+      if (firjan) status = 'monitorado_firjan';
+      else if (geral) status = 'monitor_outro_cliente';
+      enriquecidas.push({ ...item, status_firjan: status, monitor_geral: geral, monitor_firjan: firjan });
+    } catch (err) {
+      console.warn('⚠️ Falha no cruzamento Monitor para ' + item.sigla + ' ' + item.numero + '/' + item.ano + ': ' + err.message);
+      enriquecidas.push({ ...item, status_firjan: 'pendente_cruzamento' });
+    }
+  }
+
+  return enriquecidas;
+}
+
 function montarLinhasPorData(proposicoes) {
   const porData = agruparPorData(proposicoes);
   const datasOrdenadas = Object.keys(porData).sort(compararDataBR);
+  let ordinal = 0;
 
   return datasOrdenadas.map(data => {
     const grupo = porData[data].sort((a, b) => {
@@ -291,20 +402,26 @@ function montarLinhasPorData(proposicoes) {
     });
 
     const header = '<tr>' +
-      '<td colspan="5" style="padding:12px 10px 6px;background:#e8eef5;font-weight:bold;color:#1a3a5c;font-size:14px;border-top:3px solid #1a3a5c">' +
+      '<td colspan="8" style="padding:12px 10px 6px;background:#e8eef5;font-weight:bold;color:#1a3a5c;font-size:14px;border-top:3px solid #1a3a5c">' +
       'Apresentadas em ' + escapeHtml(data) + ' — ' + grupo.length + ' proposição(ões)' +
       '</td></tr>';
 
     const rows = grupo.map(p => {
+      ordinal += 1;
+      const status = p.status_firjan || 'pendente_cruzamento';
+      const checked = status === 'monitorado_firjan' ? ' checked disabled' : '';
       const numero = escapeHtml(p.numero);
       const link = p.url ? '<a href="' + escapeHtml(p.url) + '" style="color:#1a3a5c;text-decoration:none"><strong>' + numero + '</strong></a>' : '<strong>' + numero + '</strong>';
 
       return '<tr>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px;white-space:nowrap">' + escapeHtml(p.sigla) + '</td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;color:#667085;font-size:12px;text-align:center;font-weight:bold">' + ordinal + '</td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;text-align:center"><input type="checkbox"' + checked + ' style="width:18px;height:18px"></td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px;white-space:nowrap"><span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">' + escapeHtml(p.sigla) + '</span></td>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap">' + link + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + escapeHtml(p.autor) + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + escapeHtml(p.label) + '</td>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + escapeHtml(p.ementa) + '</td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + escapeHtml(p.autor) + '</td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + statusMonitorBadge(status) + '</td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;background:#fcfcfd;min-width:150px">' + escapeHtml(observacaoFirjan(status)) + '</td>' +
       '</tr>';
     }).join('');
 
@@ -333,14 +450,18 @@ async function enviarEmail(novas) {
     '<p style="display:inline-block;background:#e6f1fb;color:#0f3357;padding:6px 14px;border-radius:20px;font-weight:bold;margin:0 0 16px 0">FIRJAN</p>',
     '<h2 style="color:#111827;margin:0 0 6px 0;font-size:24px">FIRJAN | CMRJ — Novas proposições</h2>',
     '<p style="color:#526070;margin:0 0 18px 0">Rodada semanal • ' + intervaloSemana + ' • gerado em ' + formatarDataHoraBRT() + ' BRT</p>',
-    '<p style="background:#eef6ff;border:1px solid #c7ddf2;color:#173d63;padding:12px 14px;border-radius:8px;font-weight:bold">' + novas.length + ' proposição(ões) nova(s) localizada(s) na Câmara do Rio, separadas por data de apresentação</p>',
+    '<p style="background:#eef6ff;border:1px solid #c7ddf2;color:#173d63;padding:12px 14px;border-radius:8px;font-weight:bold">' + novas.length + ' proposição(ões) nova(s) localizada(s) na Câmara do Rio, separadas por data de apresentação e status no Monitor</p>',
+    '<div style="margin:0 0 14px;color:#526070;font-size:13px;line-height:1.45">Marquem os projetos que querem monitorar. Quando o projeto já estiver no Monitor ou já estiver em FIRJAN, o status aparece na linha.</div>',
     '<table style="width:100%;border-collapse:collapse;font-size:14px">',
     '<thead><tr style="background:#1a3a5c;color:white">',
-    '<th style="padding:10px;text-align:left">Sigla</th>',
-    '<th style="padding:10px;text-align:left">Número/Ano</th>',
-    '<th style="padding:10px;text-align:left">Autor(es)</th>',
+    '<th style="padding:10px;text-align:left">Item</th>',
+    '<th style="padding:10px;text-align:left">Marcar</th>',
     '<th style="padding:10px;text-align:left">Tipo</th>',
+    '<th style="padding:10px;text-align:left">Projeto</th>',
     '<th style="padding:10px;text-align:left">Ementa</th>',
+    '<th style="padding:10px;text-align:left">Autor</th>',
+    '<th style="padding:10px;text-align:left">Status Monitor</th>',
+    '<th style="padding:10px;text-align:left">Observação FIRJAN</th>',
     '</tr></thead>',
     '<tbody>' + linhas + '</tbody>',
     '</table>',
@@ -396,7 +517,8 @@ async function enviarEmail(novas) {
     console.log('⚙️ Primeiro run detectado — marcando todas como vistas sem enviar email.');
     doAnoAtual.forEach(p => idsVistos.add(p.id));
   } else if (novas.length > 0) {
-    await enviarEmail(novas);
+    const novasEnriquecidas = await enriquecerComMonitor(novas);
+    await enviarEmail(novasEnriquecidas);
     novas.forEach(p => idsVistos.add(p.id));
   } else {
     console.log('✅ Sem novidades. Nada a enviar.');
