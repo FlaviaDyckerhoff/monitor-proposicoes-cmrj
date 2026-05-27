@@ -5,7 +5,7 @@ env:
 
 on:
   schedule:
-    - cron: '10 20 * * 5'   # 17:10 BRT, sexta-feira
+    - cron: '28 9 * * *'   # 06:28 BRT
   workflow_dispatch:
 
 concurrency:
