@@ -26,6 +26,8 @@ const TIPOS = [
   { sigla: 'MSG',  label: 'Mensagem do Executivo',           form: 'Internet/MensInt?OpenForm'      },
 ];
 
+const ORDEM_TIPOS_EMAIL = ['PEC', 'PLC', 'PL'];
+
 // ─── Estado ───────────────────────────────────────────────────────────────────
 
 function carregarEstado() {
@@ -60,6 +62,36 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function siglaEmail(sigla) {
+  return sigla === 'PELO' ? 'PEC' : sigla;
+}
+
+function ordemTipoEmail(sigla) {
+  const normalizada = siglaEmail(sigla);
+  const prioridade = ORDEM_TIPOS_EMAIL.indexOf(normalizada);
+  if (prioridade !== -1) return prioridade;
+
+  const ordemOriginal = TIPOS.findIndex(t => t.sigla === sigla);
+  return 100 + (ordemOriginal === -1 ? 999 : ordemOriginal);
+}
+
+function contemDestaqueFirjan(texto) {
+  return /FIRJAN|Federa(?:ç|c)ão das Ind(?:ú|u)strias(?: do Estado)? do Rio de Janeiro|Federa(?:ç|c)ão das Ind(?:ú|u)strias do RJ|Federa(?:ç|c)ão das Ind\.? do RJ/i.test(String(texto || ''));
+}
+
+function destacarTermosFirjan(texto) {
+  let html = escapeHtml(texto);
+  [
+    /FIRJAN/gi,
+    /Federa(?:ç|c)ão das Ind(?:ú|u)strias(?: do Estado)? do Rio de Janeiro/gi,
+    /Federa(?:ç|c)ão das Ind(?:ú|u)strias do RJ/gi,
+    /Federa(?:ç|c)ão das Ind\.? do RJ/gi,
+  ].forEach(regex => {
+    html = html.replace(regex, '<strong style="background:#fff3b0;color:#7a4d00;padding:1px 3px;border-radius:3px">$&</strong>');
+  });
+  return html;
 }
 
 function formatarDataHoraBRT() {
@@ -243,7 +275,7 @@ function compararDataBR(a, b) {
   return parseDataBR(a) - parseDataBR(b);
 }
 
-function obterIntervaloSemanaBRT() {
+function obterLimitesSemanaBRT() {
   const partes = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
@@ -261,8 +293,20 @@ function obterIntervaloSemanaBRT() {
   const sexta = new Date(segunda);
   sexta.setUTCDate(segunda.getUTCDate() + 4);
 
+  return { segunda, sexta };
+}
+
+function obterIntervaloSemanaBRT() {
+  const { segunda, sexta } = obterLimitesSemanaBRT();
   const fmt = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' });
   return fmt.format(segunda) + ' a ' + fmt.format(sexta);
+}
+
+function estaNaSemanaAtualBRT(proposicao) {
+  const data = parseDataBR(proposicao.data);
+  if (!data) return false;
+  const { segunda, sexta } = obterLimitesSemanaBRT();
+  return data >= segunda.getTime() && data <= sexta.getTime();
 }
 
 function agruparPorData(proposicoes) {
@@ -295,6 +339,14 @@ function statusMonitorBadge(status) {
 function observacaoFirjan(status) {
   if (status === 'monitorado_firjan') return 'Já incorporado para FIRJAN';
   return '';
+}
+
+function observacaoEmail(proposicao, status) {
+  const observacoes = [];
+  const obsStatus = observacaoFirjan(status);
+  if (obsStatus) observacoes.push(obsStatus);
+  if (contemDestaqueFirjan(proposicao.ementa)) observacoes.push('Destaque: FIRJAN citada na ementa');
+  return observacoes.join(' | ');
 }
 
 function normalizarNumeroMonitor(numero) {
@@ -396,8 +448,8 @@ function montarLinhasPorData(proposicoes) {
 
   return datasOrdenadas.map(data => {
     const grupo = porData[data].sort((a, b) => {
-      const tipoA = TIPOS.findIndex(t => t.sigla === a.sigla);
-      const tipoB = TIPOS.findIndex(t => t.sigla === b.sigla);
+      const tipoA = ordemTipoEmail(a.sigla);
+      const tipoB = ordemTipoEmail(b.sigla);
       if (tipoA !== tipoB) return tipoA - tipoB;
       return numeroOrdenavel(b.numero) - numeroOrdenavel(a.numero);
     });
@@ -413,16 +465,18 @@ function montarLinhasPorData(proposicoes) {
       const checked = status === 'monitorado_firjan' ? ' checked disabled' : '';
       const numero = escapeHtml(p.numero);
       const link = p.url ? '<a href="' + escapeHtml(p.url) + '" style="color:#1a3a5c;text-decoration:none"><strong>' + numero + '</strong></a>' : '<strong>' + numero + '</strong>';
+      const destaqueFirjan = contemDestaqueFirjan(p.ementa);
+      const rowStyle = destaqueFirjan ? ' style="background:#fffdf3"' : '';
 
-      return '<tr>' +
+      return '<tr' + rowStyle + '>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;color:#667085;font-size:12px;text-align:center;font-weight:bold">' + ordinal + '</td>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;text-align:center"><input type="checkbox"' + checked + ' style="width:18px;height:18px"></td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px;white-space:nowrap"><span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">' + escapeHtml(p.sigla) + '</span></td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px;white-space:nowrap"><span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">' + escapeHtml(siglaEmail(p.sigla)) + '</span></td>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap">' + link + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + escapeHtml(p.ementa) + '</td>' +
+        '<td style="padding:10px 12px;border-bottom:1px solid #eee;font-size:14px;line-height:1.45;min-width:360px;width:42%">' + destacarTermosFirjan(p.ementa) + '</td>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + escapeHtml(p.autor) + '</td>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + statusMonitorBadge(status) + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;background:#fcfcfd;min-width:150px">' + escapeHtml(observacaoFirjan(status)) + '</td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;background:#fcfcfd;min-width:150px">' + escapeHtml(observacaoEmail(p, status)) + '</td>' +
       '</tr>';
     }).join('');
 
@@ -453,7 +507,7 @@ async function enviarEmail(novas) {
     '<p style="color:#526070;margin:0 0 18px 0">Rodada semanal • ' + intervaloSemana + ' • gerado em ' + formatarDataHoraBRT() + ' BRT</p>',
     '<p style="background:#eef6ff;border:1px solid #c7ddf2;color:#173d63;padding:12px 14px;border-radius:8px;font-weight:bold">' + novas.length + ' proposição(ões) nova(s) localizada(s) na Câmara do Rio, separadas por data de apresentação e status no Monitor</p>',
     '<div style="margin:0 0 14px;color:#526070;font-size:13px;line-height:1.45">Marquem os projetos que querem monitorar. Quando o projeto já estiver no Monitor ou já estiver em FIRJAN, o status aparece na linha.</div>',
-    '<table style="width:100%;border-collapse:collapse;font-size:14px">',
+    '<table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:auto">',
     '<thead><tr style="background:#1a3a5c;color:white">',
     '<th style="padding:10px;text-align:left">Item</th>',
     '<th style="padding:10px;text-align:left">Marcar</th>',
@@ -509,8 +563,11 @@ async function enviarEmail(novas) {
   const doAnoAtual = todas.filter(p => p.ano === anoAtual);
   console.log(`\n📊 Total encontrado: ${todas.length} | Do ano ${anoAtual}: ${doAnoAtual.length}`);
 
-  const novas = doAnoAtual.filter(p => !idsVistos.has(p.id));
-  console.log(`🆕 Novas (não vistas antes): ${novas.length}`);
+  const daSemana = doAnoAtual.filter(estaNaSemanaAtualBRT);
+  console.log(`📅 Da semana atual (seg-sex): ${daSemana.length}`);
+
+  const novas = daSemana.filter(p => !idsVistos.has(p.id));
+  console.log(`🆕 Novas da semana (não vistas antes): ${novas.length}`);
 
   // Filtro B: primeiro run — marca tudo como visto sem enviar email
   const primeiroRun = idsVistos.size === 0;
