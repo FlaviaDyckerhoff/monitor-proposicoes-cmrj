@@ -9,7 +9,7 @@ const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
 const BASE_URL = 'https://aplicnt.camara.rj.gov.br/APL/Legislativos/scpro.nsf';
-const LOGO_PATH = path.join(__dirname, 'assets', 'monitor-logo-color.png');
+const LOGO_PATH = path.join(__dirname, 'assets', 'monitor-logo-white.png');
 const FIRJAN_LOGO_PATH = path.join(__dirname, 'assets', 'firjan-logo-white.png');
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 let falhasBusca = 0;
@@ -587,7 +587,7 @@ async function enviarEmail(novas) {
     subject: FIRJAN_ASSUNTO_PREFIXO + 'FIRJAN | CMRJ — Novas proposições da semana — ' + formatarDataBRT(),
     html,
     attachments: [
-      ...(fs.existsSync(LOGO_PATH) ? [{ filename: 'monitor-logo-color.png', path: LOGO_PATH, cid: 'monitorLogo' }] : []),
+      ...(fs.existsSync(LOGO_PATH) ? [{ filename: 'monitor-logo-white.png', path: LOGO_PATH, cid: 'monitorLogo' }] : []),
       ...(fs.existsSync(FIRJAN_LOGO_PATH) ? [{ filename: 'firjan-logo-white.png', path: FIRJAN_LOGO_PATH, cid: 'firjanLogo' }] : []),
     ],
   });
