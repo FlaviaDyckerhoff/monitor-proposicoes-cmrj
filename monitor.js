@@ -492,13 +492,15 @@ function montarLinhasPorData(proposicoes) {
       '</tr>';
     }).join('');
 
-    const resumoRows = montarResumoTiposBaixoVolume(resumidas);
-    return header + rows + resumoRows;
+    const resumo = montarResumoTiposBaixoVolume(resumidas, ordinal);
+    ordinal = resumo.ordinal;
+    return header + rows + resumo.html;
   }).join('');
 }
 
-function montarResumoTiposBaixoVolume(proposicoes) {
-  if (!proposicoes.length) return '';
+function montarResumoTiposBaixoVolume(proposicoes, ordinalInicial) {
+  if (!proposicoes.length) return { html: '', ordinal: ordinalInicial };
+  let ordinal = ordinalInicial;
 
   const porTipo = proposicoes.reduce((acc, p) => {
     const tipo = siglaEmail(p.sigla);
@@ -507,26 +509,33 @@ function montarResumoTiposBaixoVolume(proposicoes) {
     return acc;
   }, {});
 
-  return Object.keys(porTipo).sort((a, b) => ordemTipoEmail(a) - ordemTipoEmail(b)).map(tipo => {
+  const rows = Object.keys(porTipo).sort((a, b) => ordemTipoEmail(a) - ordemTipoEmail(b)).map(tipo => {
     const itens = porTipo[tipo].sort((a, b) => numeroOrdenavel(b.numero) - numeroOrdenavel(a.numero));
+    const header = '<tr><td colspan="8" style="padding:0;border-bottom:1px solid #d7dde7;background:#ffffff">' +
+      '<div style="background:#1a3a5c;color:#ffffff;font-weight:bold;font-size:13px;padding:8px 10px">' + escapeHtml(tipo) + ' — ' + itens.length + ' no período</div>' +
+      '</td></tr>';
     const linhas = itens.map(p => {
+      ordinal += 1;
+      const status = p.status_firjan || 'pendente_cruzamento';
+      const checked = status === 'monitorado_firjan' ? ' checked disabled' : '';
       const numero = escapeHtml(p.numero);
       const projeto = p.url ? '<a href="' + escapeHtml(p.url) + '" style="color:#1a3a5c;text-decoration:none"><strong>' + numero + '</strong></a>' : '<strong>' + numero + '</strong>';
       const autor = p.autor && p.autor !== '-' ? escapeHtml(p.autor) : '-';
-      return '<tr>' +
+      return '<tr style="background:#fbfcfe">' +
+        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;color:#667085;font-size:11px;text-align:center;font-weight:bold">' + ordinal + '</td>' +
+        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;text-align:center"><input type="checkbox"' + checked + ' style="width:17px;height:17px"></td>' +
+        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;color:#555;font-size:11px;white-space:nowrap"><span style="display:inline-block;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">' + escapeHtml(tipo) + '</span></td>' +
         '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;white-space:nowrap;font-size:12px">' + projeto + '</td>' +
-        '<td style="padding:7px 10px;border-bottom:1px solid #eef2f6;font-size:12px;line-height:1.35;color:#344054">' + destacarTermosFirjan(p.ementa) + '</td>' +
-        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;font-size:11px;color:#667085;width:18%">' + autor + '</td>' +
+        '<td style="padding:7px 10px;border-bottom:1px solid #eef2f6;font-size:12px;line-height:1.35;color:#344054;min-width:360px;width:42%">' + destacarTermosFirjan(p.ementa) + '</td>' +
+        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;font-size:11px;color:#667085">' + autor + '</td>' +
+        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;font-size:11px">' + statusMonitorBadge(status) + '</td>' +
+        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;font-size:11px;background:#fcfcfd;min-width:170px">' + campoObservacaoFirjan() + '</td>' +
       '</tr>';
     }).join('');
-
-    return '<tr><td colspan="8" style="padding:0;border-bottom:1px solid #d7dde7;background:#ffffff">' +
-      '<div style="background:#1a3a5c;color:#ffffff;font-weight:bold;font-size:13px;padding:8px 10px">' + escapeHtml(tipo) + ' — ' + itens.length + ' no período</div>' +
-      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;background:#fbfcfe">' +
-      '<tbody>' + linhas + '</tbody>' +
-      '</table>' +
-      '</td></tr>';
+    return header + linhas;
   }).join('');
+
+  return { html: rows, ordinal };
 }
 
 
