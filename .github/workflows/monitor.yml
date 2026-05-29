@@ -5,6 +5,9 @@ env:
 
 on:
   workflow_dispatch:
+  schedule:
+    # Sexta-feira 17h BRT
+    - cron: '0 20 * * 5'
 
 concurrency:
   group: monitor-proposicoes-cmrj
@@ -46,7 +49,7 @@ jobs:
           EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
           FIRJAN_DESTINO: tramitacao@monitorlegislativo.com.br
-          FIRJAN_ASSUNTO_PREFIXO: ""
+          FIRJAN_ASSUNTO_PREFIXO: "PREVIEW | "
           ALERTAR_SEM_NOVIDADES: "1"
           MONITOR_USER: ${{ secrets.MONITOR_USER }}
           MONITOR_PASS: ${{ secrets.MONITOR_PASS }}
