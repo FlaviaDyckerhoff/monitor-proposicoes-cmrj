@@ -10,6 +10,7 @@ const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
 const BASE_URL = 'https://aplicnt.camara.rj.gov.br/APL/Legislativos/scpro.nsf';
 const LOGO_PATH = path.join(__dirname, 'assets', 'monitor-logo-color.png');
+const FIRJAN_LOGO_PATH = path.join(__dirname, 'assets', 'firjan-logo-white.png');
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 let falhasBusca = 0;
 
@@ -508,18 +509,22 @@ function montarResumoTiposBaixoVolume(proposicoes) {
 
   return Object.keys(porTipo).sort((a, b) => ordemTipoEmail(a) - ordemTipoEmail(b)).map(tipo => {
     const itens = porTipo[tipo].sort((a, b) => numeroOrdenavel(b.numero) - numeroOrdenavel(a.numero));
-    const lista = itens.map(p => {
+    const linhas = itens.map(p => {
       const numero = escapeHtml(p.numero);
-      const projeto = p.url ? '<a href="' + escapeHtml(p.url) + '" style="color:#1a3a5c;text-decoration:none">' + numero + '</a>' : numero;
-      const autor = p.autor && p.autor !== '-' ? ' — ' + escapeHtml(p.autor) : '';
-      return '<li style="margin:0 0 6px 0">' + projeto + autor + '</li>';
+      const projeto = p.url ? '<a href="' + escapeHtml(p.url) + '" style="color:#1a3a5c;text-decoration:none"><strong>' + numero + '</strong></a>' : '<strong>' + numero + '</strong>';
+      const autor = p.autor && p.autor !== '-' ? escapeHtml(p.autor) : '-';
+      return '<tr>' +
+        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;white-space:nowrap;font-size:12px">' + projeto + '</td>' +
+        '<td style="padding:7px 10px;border-bottom:1px solid #eef2f6;font-size:12px;line-height:1.35;color:#344054">' + destacarTermosFirjan(p.ementa) + '</td>' +
+        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;font-size:11px;color:#667085;width:18%">' + autor + '</td>' +
+      '</tr>';
     }).join('');
 
-    return '<tr><td colspan="8" style="padding:10px 12px;border-bottom:1px solid #e5e7eb;background:#fbfcfe">' +
-      '<details>' +
-      '<summary style="cursor:pointer;color:#1a3a5c;font-weight:bold">' + escapeHtml(tipo) + ' — ' + itens.length + ' no período. Abrir lista</summary>' +
-      '<ol style="margin:10px 0 0 18px;padding:0;color:#475467;font-size:12px;line-height:1.4">' + lista + '</ol>' +
-      '</details>' +
+    return '<tr><td colspan="8" style="padding:0;border-bottom:1px solid #d7dde7;background:#ffffff">' +
+      '<div style="background:#1a3a5c;color:#ffffff;font-weight:bold;font-size:13px;padding:8px 10px">' + escapeHtml(tipo) + ' — ' + itens.length + ' no período</div>' +
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;background:#fbfcfe">' +
+      '<tbody>' + linhas + '</tbody>' +
+      '</table>' +
       '</td></tr>';
   }).join('');
 }
@@ -535,19 +540,20 @@ async function enviarEmail(novas) {
   const intervaloSemana = obterIntervaloSemanaBRT();
 
   const html = [
-    '<div style="font-family:Arial,sans-serif;max-width:960px;margin:0 auto;background:#ffffff;color:#111827">',
-    '<div style="background:#0f3357;padding:22px 24px;border-radius:12px 12px 0 0;color:#ffffff">',
-    '<img src="cid:monitorLogo" alt="Monitor Legislativo" style="height:58px;vertical-align:middle;margin-right:18px">',
-    '<span style="font-size:26px;font-weight:700;vertical-align:middle">Monitor Legislativo</span>',
-    '<div style="font-size:14px;color:#d7e5f2;margin-top:8px">Proposições novas • Câmara Municipal do Rio de Janeiro</div>',
+    '<div style="font-family:Arial,sans-serif;max-width:1180px;margin:0 auto;background:#ffffff;color:#111827">',
+    '<div style="background:#0f3357;padding:16px 22px;border-radius:12px 12px 0 0;color:#ffffff">',
+    '<table role="presentation" style="width:100%;border-collapse:collapse"><tr>',
+    '<td style="vertical-align:middle;text-align:left"><img src="cid:monitorLogo" alt="Monitor Legislativo" style="height:54px;vertical-align:middle"></td>',
+    '<td style="vertical-align:middle;text-align:right"><img src="cid:firjanLogo" alt="Firjan" style="height:42px;vertical-align:middle"></td>',
+    '</tr></table>',
+    '<div style="font-size:13px;color:#d7e5f2;margin-top:8px">Proposições novas • Câmara Municipal do Rio de Janeiro</div>',
     '</div>',
-    '<div style="border:1px solid #d7dde7;border-top:0;padding:24px;border-radius:0 0 12px 12px">',
-    '<p style="display:inline-block;background:#e6f1fb;color:#0f3357;padding:6px 14px;border-radius:20px;font-weight:bold;margin:0 0 16px 0">FIRJAN</p>',
-    '<h2 style="color:#111827;margin:0 0 6px 0;font-size:24px">FIRJAN | CMRJ — Novas proposições</h2>',
-    '<p style="color:#526070;margin:0 0 18px 0">Rodada semanal • ' + intervaloSemana + ' • gerado em ' + formatarDataHoraBRT() + ' BRT</p>',
-    '<p style="background:#eef6ff;border:1px solid #c7ddf2;color:#173d63;padding:12px 14px;border-radius:8px;font-weight:bold">' + novas.length + ' proposição(ões) nova(s) localizada(s) na Câmara do Rio, separadas por data de apresentação e status no Monitor</p>',
-    '<div style="margin:0 0 14px;color:#526070;font-size:13px;line-height:1.45">Marquem os projetos que querem monitorar. Quando o projeto já estiver no Monitor ou já estiver em FIRJAN, o status aparece na linha.</div>',
-    '<table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:auto">',
+    '<div style="border:1px solid #d7dde7;border-top:0;padding:18px;border-radius:0 0 12px 12px">',
+    '<h2 style="color:#111827;margin:0 0 6px 0;font-size:22px">FIRJAN | CMRJ — Novas proposições</h2>',
+    '<p style="color:#526070;margin:0 0 14px 0;font-size:13px">Rodada semanal • ' + intervaloSemana + ' • gerado em ' + formatarDataHoraBRT() + ' BRT</p>',
+    '<p style="background:#eef6ff;border:1px solid #c7ddf2;color:#173d63;padding:10px 12px;border-radius:8px;font-weight:bold;margin:0 0 12px 0">' + novas.length + ' proposição(ões) nova(s) localizada(s) na Câmara do Rio, separadas por data de apresentação e status no Monitor</p>',
+    '<div style="margin:0 0 12px;color:#526070;font-size:12px;line-height:1.4">Marquem os projetos que querem monitorar. Quando o projeto já estiver no Monitor ou já estiver em FIRJAN, o status aparece na linha.</div>',
+    '<table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:auto">',
     '<thead><tr style="background:#1a3a5c;color:white">',
     '<th style="padding:10px;text-align:left">Item</th>',
     '<th style="padding:10px;text-align:left">Marcar</th>',
@@ -571,7 +577,10 @@ async function enviarEmail(novas) {
     to: FIRJAN_DESTINO,
     subject: FIRJAN_ASSUNTO_PREFIXO + 'FIRJAN | CMRJ — Novas proposições da semana — ' + formatarDataBRT(),
     html,
-    attachments: fs.existsSync(LOGO_PATH) ? [{ filename: 'monitor-logo-color.png', path: LOGO_PATH, cid: 'monitorLogo' }] : [],
+    attachments: [
+      ...(fs.existsSync(LOGO_PATH) ? [{ filename: 'monitor-logo-color.png', path: LOGO_PATH, cid: 'monitorLogo' }] : []),
+      ...(fs.existsSync(FIRJAN_LOGO_PATH) ? [{ filename: 'firjan-logo-white.png', path: FIRJAN_LOGO_PATH, cid: 'firjanLogo' }] : []),
+    ],
   });
 
   console.log('✅ Email FIRJAN/CMRJ enviado para ' + FIRJAN_DESTINO + ' com ' + novas.length + ' proposições novas.');
