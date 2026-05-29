@@ -27,6 +27,7 @@ const TIPOS = [
 ];
 
 const ORDEM_TIPOS_EMAIL = ['PEC', 'PLC', 'PL'];
+const TIPOS_RESUMO_EMAIL = new Set(['IND-L', 'IND', 'MOC', 'REQ', 'REQ-I', 'REQ-SN']);
 
 // ─── Estado ───────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,10 @@ function ordemTipoEmail(sigla) {
 
   const ordemOriginal = TIPOS.findIndex(t => t.sigla === sigla);
   return 100 + (ordemOriginal === -1 ? 999 : ordemOriginal);
+}
+
+function ehTipoResumoEmail(sigla) {
+  return TIPOS_RESUMO_EMAIL.has(sigla);
 }
 
 function contemDestaqueFirjan(texto) {
@@ -349,6 +354,10 @@ function observacaoEmail(proposicao, status) {
   return observacoes.join(' | ');
 }
 
+function campoObservacaoFirjan() {
+  return '<div style="min-height:34px;border:1px solid #d0d5dd;background:#ffffff;border-radius:6px">&nbsp;</div>';
+}
+
 function normalizarNumeroMonitor(numero) {
   const match = String(numero || '').match(/\d+/);
   return match ? match[0] : String(numero || '');
@@ -453,13 +462,15 @@ function montarLinhasPorData(proposicoes) {
       if (tipoA !== tipoB) return tipoA - tipoB;
       return numeroOrdenavel(b.numero) - numeroOrdenavel(a.numero);
     });
+    const principais = grupo.filter(p => !ehTipoResumoEmail(p.sigla));
+    const resumidas = grupo.filter(p => ehTipoResumoEmail(p.sigla));
 
     const header = '<tr>' +
       '<td colspan="8" style="padding:12px 10px 6px;background:#e8eef5;font-weight:bold;color:#1a3a5c;font-size:14px;border-top:3px solid #1a3a5c">' +
       'Apresentadas em ' + escapeHtml(data) + ' — ' + grupo.length + ' proposição(ões)' +
       '</td></tr>';
 
-    const rows = grupo.map(p => {
+    const rows = principais.map(p => {
       ordinal += 1;
       const status = p.status_firjan || 'pendente_cruzamento';
       const checked = status === 'monitorado_firjan' ? ' checked disabled' : '';
@@ -476,11 +487,40 @@ function montarLinhasPorData(proposicoes) {
         '<td style="padding:10px 12px;border-bottom:1px solid #eee;font-size:14px;line-height:1.45;min-width:360px;width:42%">' + destacarTermosFirjan(p.ementa) + '</td>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + escapeHtml(p.autor) + '</td>' +
         '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + statusMonitorBadge(status) + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;background:#fcfcfd;min-width:150px">' + escapeHtml(observacaoEmail(p, status)) + '</td>' +
+        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;background:#fcfcfd;min-width:170px">' + campoObservacaoFirjan() + '</td>' +
       '</tr>';
     }).join('');
 
-    return header + rows;
+    const resumoRows = montarResumoTiposBaixoVolume(resumidas);
+    return header + rows + resumoRows;
+  }).join('');
+}
+
+function montarResumoTiposBaixoVolume(proposicoes) {
+  if (!proposicoes.length) return '';
+
+  const porTipo = proposicoes.reduce((acc, p) => {
+    const tipo = siglaEmail(p.sigla);
+    if (!acc[tipo]) acc[tipo] = [];
+    acc[tipo].push(p);
+    return acc;
+  }, {});
+
+  return Object.keys(porTipo).sort((a, b) => ordemTipoEmail(a) - ordemTipoEmail(b)).map(tipo => {
+    const itens = porTipo[tipo].sort((a, b) => numeroOrdenavel(b.numero) - numeroOrdenavel(a.numero));
+    const lista = itens.map(p => {
+      const numero = escapeHtml(p.numero);
+      const projeto = p.url ? '<a href="' + escapeHtml(p.url) + '" style="color:#1a3a5c;text-decoration:none">' + numero + '</a>' : numero;
+      const autor = p.autor && p.autor !== '-' ? ' — ' + escapeHtml(p.autor) : '';
+      return '<li style="margin:0 0 6px 0">' + projeto + autor + '</li>';
+    }).join('');
+
+    return '<tr><td colspan="8" style="padding:10px 12px;border-bottom:1px solid #e5e7eb;background:#fbfcfe">' +
+      '<details>' +
+      '<summary style="cursor:pointer;color:#1a3a5c;font-weight:bold">' + escapeHtml(tipo) + ' — ' + itens.length + ' no período. Abrir lista</summary>' +
+      '<ol style="margin:10px 0 0 18px;padding:0;color:#475467;font-size:12px;line-height:1.4">' + lista + '</ol>' +
+      '</details>' +
+      '</td></tr>';
   }).join('');
 }
 
