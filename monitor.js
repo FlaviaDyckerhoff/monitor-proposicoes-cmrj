@@ -463,81 +463,44 @@ function montarLinhasPorData(proposicoes) {
       if (tipoA !== tipoB) return tipoA - tipoB;
       return numeroOrdenavel(b.numero) - numeroOrdenavel(a.numero);
     });
-    const principais = grupo.filter(p => !ehTipoResumoEmail(p.sigla));
-    const resumidas = grupo.filter(p => ehTipoResumoEmail(p.sigla));
 
     const header = '<tr>' +
       '<td colspan="8" style="padding:12px 10px 6px;background:#e8eef5;font-weight:bold;color:#1a3a5c;font-size:14px;border-top:3px solid #1a3a5c">' +
       'Apresentadas em ' + escapeHtml(data) + ' — ' + grupo.length + ' proposição(ões)' +
       '</td></tr>';
 
-    const rows = principais.map(p => {
+    const rows = grupo.map(p => {
       ordinal += 1;
       const status = p.status_firjan || 'pendente_cruzamento';
       const checked = status === 'monitorado_firjan' ? ' checked disabled' : '';
       const numero = escapeHtml(p.numero);
       const link = p.url ? '<a href="' + escapeHtml(p.url) + '" style="color:#1a3a5c;text-decoration:none"><strong>' + numero + '</strong></a>' : '<strong>' + numero + '</strong>';
       const destaqueFirjan = contemDestaqueFirjan(p.ementa);
-      const rowStyle = destaqueFirjan ? ' style="background:#fffdf3"' : '';
+      const resumo = ehTipoResumoEmail(p.sigla);
+      const rowStyle = destaqueFirjan ? ' style="background:#fffdf3"' : (resumo ? ' style="background:#fbfcfe"' : '');
+      const padding = resumo ? '7px 8px' : '8px';
+      const ementaPadding = resumo ? '7px 10px' : '10px 12px';
+      const fontSize = resumo ? '12px' : '14px';
+      const metaFontSize = resumo ? '11px' : '12px';
+      const badgeFontSize = resumo ? '10px' : '11px';
+      const checkboxSize = resumo ? '17px' : '18px';
+      const borderColor = resumo ? '#eef2f6' : '#eee';
 
       return '<tr' + rowStyle + '>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;color:#667085;font-size:12px;text-align:center;font-weight:bold">' + ordinal + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;text-align:center"><input type="checkbox"' + checked + ' style="width:18px;height:18px"></td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px;white-space:nowrap"><span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">' + escapeHtml(siglaEmail(p.sigla)) + '</span></td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap">' + link + '</td>' +
-        '<td style="padding:10px 12px;border-bottom:1px solid #eee;font-size:14px;line-height:1.45;min-width:360px;width:42%">' + destacarTermosFirjan(p.ementa) + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + escapeHtml(p.autor) + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">' + statusMonitorBadge(status) + '</td>' +
-        '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;background:#fcfcfd;min-width:170px">' + campoObservacaoFirjan() + '</td>' +
+        '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';color:#667085;font-size:' + metaFontSize + ';text-align:center;font-weight:bold">' + ordinal + '</td>' +
+        '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';text-align:center"><input type="checkbox"' + checked + ' style="width:' + checkboxSize + ';height:' + checkboxSize + '"></td>' +
+        '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';color:#555;font-size:' + metaFontSize + ';white-space:nowrap"><span style="display:inline-block;padding:3px 7px;border-radius:999px;font-size:' + badgeFontSize + ';font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">' + escapeHtml(siglaEmail(p.sigla)) + '</span></td>' +
+        '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';white-space:nowrap;font-size:' + fontSize + '">' + link + '</td>' +
+        '<td style="padding:' + ementaPadding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + fontSize + ';line-height:1.45;color:#344054;min-width:360px;width:42%">' + destacarTermosFirjan(p.ementa) + '</td>' +
+        '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + metaFontSize + ';color:#667085">' + escapeHtml(p.autor) + '</td>' +
+        '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + metaFontSize + '">' + statusMonitorBadge(status) + '</td>' +
+        '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + metaFontSize + ';background:#fcfcfd;min-width:170px">' + campoObservacaoFirjan() + '</td>' +
       '</tr>';
     }).join('');
 
-    const resumo = montarResumoTiposBaixoVolume(resumidas, ordinal);
-    ordinal = resumo.ordinal;
-    return header + rows + resumo.html;
+    return header + rows;
   }).join('');
 }
-
-function montarResumoTiposBaixoVolume(proposicoes, ordinalInicial) {
-  if (!proposicoes.length) return { html: '', ordinal: ordinalInicial };
-  let ordinal = ordinalInicial;
-
-  const porTipo = proposicoes.reduce((acc, p) => {
-    const tipo = siglaEmail(p.sigla);
-    if (!acc[tipo]) acc[tipo] = [];
-    acc[tipo].push(p);
-    return acc;
-  }, {});
-
-  const rows = Object.keys(porTipo).sort((a, b) => ordemTipoEmail(a) - ordemTipoEmail(b)).map(tipo => {
-    const itens = porTipo[tipo].sort((a, b) => numeroOrdenavel(b.numero) - numeroOrdenavel(a.numero));
-    const header = '<tr><td colspan="8" style="padding:0;border-bottom:1px solid #d7dde7;background:#ffffff">' +
-      '<div style="background:#1a3a5c;color:#ffffff;font-weight:bold;font-size:13px;padding:8px 10px">' + escapeHtml(tipo) + ' — ' + itens.length + ' no período</div>' +
-      '</td></tr>';
-    const linhas = itens.map(p => {
-      ordinal += 1;
-      const status = p.status_firjan || 'pendente_cruzamento';
-      const checked = status === 'monitorado_firjan' ? ' checked disabled' : '';
-      const numero = escapeHtml(p.numero);
-      const projeto = p.url ? '<a href="' + escapeHtml(p.url) + '" style="color:#1a3a5c;text-decoration:none"><strong>' + numero + '</strong></a>' : '<strong>' + numero + '</strong>';
-      const autor = p.autor && p.autor !== '-' ? escapeHtml(p.autor) : '-';
-      return '<tr style="background:#fbfcfe">' +
-        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;color:#667085;font-size:11px;text-align:center;font-weight:bold">' + ordinal + '</td>' +
-        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;text-align:center"><input type="checkbox"' + checked + ' style="width:17px;height:17px"></td>' +
-        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;color:#555;font-size:11px;white-space:nowrap"><span style="display:inline-block;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">' + escapeHtml(tipo) + '</span></td>' +
-        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;white-space:nowrap;font-size:12px">' + projeto + '</td>' +
-        '<td style="padding:7px 10px;border-bottom:1px solid #eef2f6;font-size:12px;line-height:1.35;color:#344054;min-width:360px;width:42%">' + destacarTermosFirjan(p.ementa) + '</td>' +
-        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;font-size:11px;color:#667085">' + autor + '</td>' +
-        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;font-size:11px">' + statusMonitorBadge(status) + '</td>' +
-        '<td style="padding:7px 8px;border-bottom:1px solid #eef2f6;font-size:11px;background:#fcfcfd;min-width:170px">' + campoObservacaoFirjan() + '</td>' +
-      '</tr>';
-    }).join('');
-    return header + linhas;
-  }).join('');
-
-  return { html: rows, ordinal };
-}
-
 
 async function enviarEmail(novas) {
   const transporter = nodemailer.createTransport({
