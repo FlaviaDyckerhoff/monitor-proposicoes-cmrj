@@ -587,22 +587,17 @@ async function enviarEmail(novas) {
   const daSemana = doAnoAtual.filter(estaNaSemanaAtualBRT);
   console.log(`📅 Da semana atual (seg-sex): ${daSemana.length}`);
 
-  const novas = daSemana.filter(p => !idsVistos.has(p.id));
-  console.log(`🆕 Novas da semana (não vistas antes): ${novas.length}`);
+  const pacoteSemanal = daSemana;
+  console.log(`🗓️ Pacote semanal para envio: ${pacoteSemanal.length}`);
 
-  // Filtro B: primeiro run — marca tudo como visto sem enviar email
-  const primeiroRun = idsVistos.size === 0;
-  if (primeiroRun) {
-    console.log('⚙️ Primeiro run detectado — marcando todas como vistas sem enviar email.');
-    doAnoAtual.forEach(p => idsVistos.add(p.id));
-  } else if (novas.length > 0) {
-    const novasEnriquecidas = await enriquecerComMonitor(novas);
-    await enviarEmail(novasEnriquecidas);
-    novas.forEach(p => idsVistos.add(p.id));
+  if (pacoteSemanal.length > 0) {
+    const pacoteEnriquecido = await enriquecerComMonitor(pacoteSemanal);
+    await enviarEmail(pacoteEnriquecido);
+    pacoteSemanal.forEach(p => idsVistos.add(p.id));
   } else {
-    console.log('✅ Sem novidades. Nada a enviar.');
+    console.log('✅ Sem proposições na semana atual. Nada a enviar.');
     if (process.env.ALERTAR_SEM_NOVIDADES === '1') {
-      console.error('❌ Sem proposições novas em dia útil monitorado. Gerando alerta interno.');
+      console.error('❌ Sem proposições na semana atual em dia útil monitorado. Gerando alerta interno.');
       estado.proposicoes_vistas = Array.from(idsVistos);
       estado.ultima_execucao = new Date().toISOString();
       salvarEstado(estado);
@@ -610,6 +605,7 @@ async function enviarEmail(novas) {
     }
   }
 
+  doAnoAtual.forEach(p => idsVistos.add(p.id));
   estado.proposicoes_vistas = Array.from(idsVistos);
   estado.ultima_execucao = new Date().toISOString();
   salvarEstado(estado);
