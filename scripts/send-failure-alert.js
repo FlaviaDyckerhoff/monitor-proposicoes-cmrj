@@ -24,7 +24,7 @@ async function main() {
 
   const html = '<div style="font-family:Arial,sans-serif;max-width:720px">' +
     '<h2 style="color:#b42318;margin-bottom:8px">Falha no ' + MONITOR_NOME + '</h2>' +
-    '<p>O workflow de Proposicoes Novas FIRJAN falhou ou rodou sem novidades em dia util nao feriado.</p>' +
+    '<p>O workflow de Proposicoes Novas FIRJAN falhou em uma etapa operacional. Rodada sem proposicoes novas nao gera alerta.</p>' +
     '<p><strong>Workflow:</strong> ' + (GITHUB_WORKFLOW || '-') + '<br>' +
     '<strong>Branch:</strong> ' + (GITHUB_REF_NAME || '-') + '<br>' +
     '<strong>Run:</strong> ' + (runUrl ? '<a href="' + runUrl + '">' + runUrl + '</a>' : '-') + '</p>' +
@@ -50,4 +50,3 @@ main().catch((err) => {
   console.error('Erro ao enviar alerta interno:', err.message);
   process.exit(0);
 });
-

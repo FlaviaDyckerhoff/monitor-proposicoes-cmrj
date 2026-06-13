@@ -50,7 +50,6 @@ jobs:
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
           FIRJAN_DESTINO: tramitacao@monitorlegislativo.com.br
           FIRJAN_ASSUNTO_PREFIXO: "PREVIEW | "
-          ALERTAR_SEM_NOVIDADES: "1"
           MONITOR_USER: ${{ secrets.MONITOR_USER }}
           MONITOR_PASS: ${{ secrets.MONITOR_PASS }}
           FIRJAN_CLIENTE_ID: "57"
