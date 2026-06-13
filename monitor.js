@@ -633,13 +633,6 @@ async function enviarEmail(novas) {
     pacoteSemanal.forEach(p => idsVistos.add(p.id));
   } else {
     console.log('✅ Sem proposições na semana atual. Nada a enviar.');
-    if (process.env.ALERTAR_SEM_NOVIDADES === '1') {
-      console.error('❌ Sem proposições na semana atual em dia útil monitorado. Gerando alerta interno.');
-      estado.proposicoes_vistas = Array.from(idsVistos);
-      estado.ultima_execucao = new Date().toISOString();
-      salvarEstado(estado);
-      process.exit(2);
-    }
   }
 
   doAnoAtual.forEach(p => idsVistos.add(p.id));
