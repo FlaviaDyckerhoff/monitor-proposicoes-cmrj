@@ -14,9 +14,6 @@ on:
         description: "Ignorar estado salvo e reenviar o período (1=sim)"
         required: false
         default: ""
-  schedule:
-    # Segunda a sexta 05:00 BRT
-    - cron: '0 8 * * 1-5'
 
 concurrency:
   group: monitor-proposicoes-cmrj
