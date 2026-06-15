@@ -6,8 +6,8 @@ env:
 on:
   workflow_dispatch:
   schedule:
-    # Sexta-feira 17h BRT
-    - cron: '0 20 * * 5'
+    # Segunda a sexta 05:00 BRT
+    - cron: '0 8 * * 1-5'
 
 concurrency:
   group: monitor-proposicoes-cmrj
