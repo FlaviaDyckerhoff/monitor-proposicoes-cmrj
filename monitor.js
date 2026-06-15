@@ -8,6 +8,8 @@ const FIRJAN_ASSUNTO_PREFIXO = process.env.FIRJAN_ASSUNTO_PREFIXO || '';
 const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
+const BACKFILL_DAYS = Number(process.env.BACKFILL_DAYS || '10');
+const IGNORE_STATE = process.env.IGNORE_STATE === '1';
 const BASE_URL = 'https://aplicnt.camara.rj.gov.br/APL/Legislativos/scpro.nsf';
 const LOGO_PATH = path.join(__dirname, 'assets', 'monitor-logo-white.png');
 const FIRJAN_LOGO_PATH = path.join(__dirname, 'assets', 'firjan-logo-white.png');
@@ -320,6 +322,30 @@ function estaNaSemanaAtualBRT(proposicao) {
   return data >= segunda.getTime() && data <= sexta.getTime();
 }
 
+function obterLimiteRecenteBRT(dias) {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date()).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+
+  const hoje = new Date(Date.UTC(Number(partes.year), Number(partes.month) - 1, Number(partes.day)));
+  const inicio = new Date(hoje);
+  inicio.setUTCDate(hoje.getUTCDate() - Math.max(0, dias - 1));
+  return { inicio: inicio.getTime(), fim: hoje.getTime() };
+}
+
+function estaNoPeriodoRecenteBRT(proposicao) {
+  const data = parseDataBR(proposicao.data);
+  if (!data) return false;
+  const { inicio, fim } = obterLimiteRecenteBRT(BACKFILL_DAYS);
+  return data >= inicio && data <= fim;
+}
+
 function agruparPorData(proposicoes) {
   return proposicoes.reduce((acc, p) => {
     const data = p.data && p.data !== '-' ? p.data : 'Data não informada';
@@ -621,11 +647,14 @@ async function enviarEmail(novas) {
   const doAnoAtual = todas.filter(p => p.ano === anoAtual);
   console.log(`\n📊 Total encontrado: ${todas.length} | Do ano ${anoAtual}: ${doAnoAtual.length}`);
 
-  const daSemana = doAnoAtual.filter(estaNaSemanaAtualBRT);
-  console.log(`📅 Da semana atual (seg-sex): ${daSemana.length}`);
+  const recentes = doAnoAtual.filter(estaNoPeriodoRecenteBRT);
+  console.log(`📅 Últimos ${BACKFILL_DAYS} dia(s): ${recentes.length}`);
 
-  const pacoteSemanal = daSemana.filter(p => !deveExcluirDoEmail(p.sigla));
-  console.log(`🗓️ Pacote semanal para envio: ${pacoteSemanal.length}`);
+  const elegiveis = recentes.filter(p => !deveExcluirDoEmail(p.sigla));
+  console.log(`🗓️ Elegíveis para envio: ${elegiveis.length}`);
+
+  const pacoteSemanal = elegiveis.filter(p => IGNORE_STATE || !idsVistos.has(p.id));
+  console.log(`🆕 Novas ainda não vistas: ${pacoteSemanal.length}`);
 
   if (pacoteSemanal.length > 0) {
     const pacoteEnriquecido = await enriquecerComMonitor(pacoteSemanal);
@@ -635,7 +664,7 @@ async function enviarEmail(novas) {
     console.log('✅ Sem proposições na semana atual. Nada a enviar.');
   }
 
-  doAnoAtual.forEach(p => idsVistos.add(p.id));
+  elegiveis.forEach(p => idsVistos.add(p.id));
   estado.proposicoes_vistas = Array.from(idsVistos);
   estado.ultima_execucao = new Date().toISOString();
   salvarEstado(estado);

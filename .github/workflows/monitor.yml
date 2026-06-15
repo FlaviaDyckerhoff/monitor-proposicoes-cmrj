@@ -5,6 +5,15 @@ env:
 
 on:
   workflow_dispatch:
+    inputs:
+      backfill_days:
+        description: "Dias recentes para considerar no envio"
+        required: false
+        default: "10"
+      ignore_state:
+        description: "Ignorar estado salvo e reenviar o período (1=sim)"
+        required: false
+        default: ""
   schedule:
     # Segunda a sexta 05:00 BRT
     - cron: '0 8 * * 1-5'
@@ -53,6 +62,8 @@ jobs:
           MONITOR_USER: ${{ secrets.MONITOR_USER }}
           MONITOR_PASS: ${{ secrets.MONITOR_PASS }}
           FIRJAN_CLIENTE_ID: "57"
+          BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '10' }}
+          IGNORE_STATE: ${{ github.event.inputs.ignore_state }}
         run: |
           export NODE_TLS_REJECT_UNAUTHORIZED=0
           node monitor.js
