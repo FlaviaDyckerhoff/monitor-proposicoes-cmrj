@@ -132,7 +132,7 @@ function formatarDataBrasil(data) {
   const n2 = parseInt(parte2, 10);
 
   // A CMRJ/Domino publica no formato americano MM/DD/AAAA.
-  if (n1 <= 12 && n2 > 12) {
+  if (n1 <= 12) {
     return parte2 + '/' + parte1 + '/' + ano;
   }
 
