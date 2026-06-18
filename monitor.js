@@ -523,7 +523,7 @@ function montarLinhasPorData(proposicoes) {
         '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';text-align:center"><input type="checkbox"' + checked + ' style="width:' + checkboxSize + ';height:' + checkboxSize + '"></td>' +
         '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';color:#555;font-size:' + metaFontSize + ';white-space:nowrap"><span style="display:inline-block;padding:3px 7px;border-radius:999px;font-size:' + badgeFontSize + ';font-weight:700;background:#eef4ff;color:#3538cd;border:1px solid #c7d7fe;white-space:nowrap">' + escapeHtml(siglaEmail(p.sigla)) + '</span></td>' +
         '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';white-space:nowrap;font-size:' + fontSize + '">' + link + '</td>' +
-        '<td style="padding:' + ementaPadding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + fontSize + ';line-height:1.45;color:#344054;min-width:360px;width:42%">' + destacarTermosFirjan(p.ementa) + '</td>' +
+        '<td style="padding:' + ementaPadding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + fontSize + ';line-height:1.45;color:#344054;min-width:360px;width:42%">' + renderizarEmentaCliente(p, destacarTermosFirjan) + '</td>' +
         '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + metaFontSize + ';color:#667085">' + escapeHtml(p.autor) + '</td>' +
         '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + metaFontSize + '">' + statusMonitorBadge(status) + '</td>' +
         '<td style="padding:' + padding + ';border-bottom:1px solid ' + borderColor + ';font-size:' + metaFontSize + ';background:#fcfcfd;min-width:170px">' + campoObservacaoFirjan() + '</td>' +
@@ -563,6 +563,48 @@ function anotarClientesCitados(proposicoes) {
       p.ementa = String(p.ementa).trim() + ' | Cliente citado: ' + clientes.join(', ');
     }
   }
+}
+
+function mlEscapeHtmlClienteDestaque(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function mlEscapeRegExpClienteDestaque(valor) {
+  return String(valor).replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+}
+
+function mlDestacarTermosClienteEmail(texto, clientes) {
+  const nomes = Array.from(new Set([...(clientes || []), ...CLIENTES_NOMES_PROPRIOS]))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  if (!nomes.length) return mlEscapeHtmlClienteDestaque(texto);
+
+  const regex = new RegExp('(^|[^A-Za-zÀ-ÿ0-9])(' + nomes.map(mlEscapeRegExpClienteDestaque).join('|') + ')(?=[^A-Za-zÀ-ÿ0-9]|$)', 'gi');
+  return mlEscapeHtmlClienteDestaque(texto).replace(regex, (match, prefixo, termo) => {
+    return prefixo + '<span style="background:#dbeafe;color:#1e3a8a;font-weight:700;border-radius:3px;padding:1px 3px">' + termo + '</span>';
+  });
+}
+
+function renderizarEmentaCliente(p, renderBase) {
+  const texto = String((p && p.ementa) || '-');
+  const partes = texto.split(/\s+\|\s+Cliente citado:\s+/i);
+  const ementa = renderBase
+    ? renderBase(partes[0])
+    : mlDestacarTermosClienteEmail(partes[0], p && p.clientesCitados);
+  const clientes = partes.length > 1
+    ? partes.slice(1).join(' | Cliente citado: ')
+    : ((p && p.clientesCitados) || []).join(', ');
+
+  if (!clientes) return ementa;
+  return ementa + '<div style="margin-top:6px">' +
+    '<span style="display:inline-block;background:#eef6ff;border:1px solid #bfdbfe;color:#1e3a8a;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700">' +
+    'Cliente citado: ' + mlDestacarTermosClienteEmail(clientes, p && p.clientesCitados) +
+    '</span></div>';
 }
 
 async function enviarEmail(novas) {
