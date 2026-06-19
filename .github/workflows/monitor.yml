@@ -73,12 +73,3 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: atualiza estado [skip ci]"
           git pull --rebase origin main
           git push
-
-      - name: Alertar falha interna
-        if: failure() && steps.calendario.outputs.skip != 'true'
-        env:
-          EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
-          EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
-          EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
-          MONITOR_NOME: "FIRJAN CMRJ Proposições Novas"
-        run: node scripts/send-failure-alert.js
