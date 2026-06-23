@@ -742,12 +742,8 @@ async function enviarEmail(novas) {
   console.log(`🆕 Novas ainda não vistas: ${pacoteSemanal.length}`);
 
   if (pacoteSemanal.length > 0) {
-    if (FIRJAN_EMAIL_DISABLED) {
-      console.log('🚫 Preview FIRJAN/CMRJ removido: marcando novas como vistas sem envio.');
-    } else {
-      const pacoteEnriquecido = await enriquecerComMonitor(pacoteSemanal);
-      await enviarEmail(pacoteEnriquecido);
-    }
+    const pacoteEnriquecido = await enriquecerComMonitor(pacoteSemanal);
+    await enviarEmail(pacoteEnriquecido);
     pacoteSemanal.forEach(p => idsVistos.add(p.id));
   } else {
     console.log('✅ Sem proposições na semana atual. Nada a enviar.');
