@@ -584,7 +584,62 @@ function clientesCitadosNaProposicao(p) {
     const re = new RegExp('(^|[^A-Za-zÀ-ÿ0-9])' + escaped + '([^A-Za-zÀ-ÿ0-9]|$)', 'i');
     if (re.test(texto) && !achados.some(a => a.toLowerCase() === nome.toLowerCase())) achados.push(nome);
   }
+  const interesseMaracana = detectarInteresseConsorcioMaracana(texto);
+  if (interesseMaracana && !achados.some(a => /maracan/i.test(normalizarTextoCliente(a)))) {
+    achados.push('Consórcio Maracanã (interesse por ementa: ' + interesseMaracana + ')');
+  }
   return achados;
+}
+
+function normalizarTextoCliente(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function detectarInteresseConsorcioMaracana(texto) {
+  const t = normalizarTextoCliente(texto);
+  const contextoArena = [
+    /\barena(s)?\b/,
+    /\bestadio(s)?\b/,
+    /\bequipamento(s)? esportivo(s)?\b/,
+    /\bpratica(s)? esportiva(s)?\b/,
+    /\bevento(s)? (esportivo(s)?|cultural(is)?|de grande porte|realizado(s)?)\b/,
+    /\bgrande(s)? evento(s)?\b/,
+    /\bshow(s)?\b/,
+    /\bespetaculo(s)?\b/,
+    /\bestabelecimento(s)? publico(s)? e privado(s)? de uso coletivo\b/,
+    /\blocal(is)? publico(s)? e privado(s)?\b/,
+    /\bespaco(s)? publico(s)? e privado(s)?\b/,
+  ];
+  const impactoOperacional = [
+    /\bbanheiro(s)?\b/,
+    /\bsanitario(s)?\b/,
+    /\bacesso universal\b/,
+    /\bacessibilidade\b/,
+    /\bpessoa(s)? com deficiencia\b/,
+    /\bpcd\b/,
+    /\bseguranca\b/,
+    /\bcontrole de acesso\b/,
+    /\bcamarote(s)?\b/,
+    /\barea(s)? vip\b/,
+    /\bestacionamento\b/,
+    /\bbebida(s)? alcoolica(s)?\b/,
+    /\bprimeiros socorros\b/,
+    /\bdesfibrilador\b/,
+    /\bvideomonitoramento\b/,
+    /\bresiduo(s)?\b/,
+    /\blogistica reversa\b/,
+  ];
+  if (contextoArena.some(re => re.test(t)) && impactoOperacional.some(re => re.test(t))) {
+    if (/\bbanheiro(s)?\b|\bsanitario(s)?\b|\bacesso universal\b/.test(t)) return 'sanitários/acesso em local de uso coletivo';
+    if (/\bacessibilidade\b|\bpessoa(s)? com deficiencia\b|\bpcd\b/.test(t)) return 'acessibilidade em arena/evento';
+    if (/\bseguranca\b|\bcontrole de acesso\b|\bvideomonitoramento\b/.test(t)) return 'segurança/controle operacional de arena';
+    if (/\bcamarote(s)?\b|\barea(s)? vip\b/.test(t)) return 'áreas de acesso restrito em eventos';
+    return 'operação de arena/evento';
+  }
+  return '';
 }
 
 function anotarClientesCitados(proposicoes) {
@@ -635,7 +690,7 @@ function renderizarEmentaCliente(p, renderBase) {
   if (!clientes) return ementa;
   return ementa + '<div style="margin-top:6px">' +
     '<span style="display:inline-block;background:#eef6ff;border:1px solid #bfdbfe;color:#1e3a8a;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700">' +
-    'Cliente citado: ' + mlDestacarTermosClienteEmail(clientes, p && p.clientesCitados) +
+    'Destaque cliente: ' + mlDestacarTermosClienteEmail(clientes, p && p.clientesCitados) +
     '</span></div>';
 }
 
