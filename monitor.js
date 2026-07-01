@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 const nodemailer = require('nodemailer');
 
 const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
@@ -16,6 +17,41 @@ const LOGO_PATH = path.join(__dirname, 'assets', 'monitor-logo-white.png');
 const FIRJAN_LOGO_PATH = path.join(__dirname, 'assets', 'firjan-logo-white.png');
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 let falhasBusca = 0;
+
+function detalharErro(err) {
+  return [
+    err && err.message,
+    err && err.code,
+    err && err.cause && err.cause.code,
+    err && err.cause && err.cause.message,
+  ].filter(Boolean).join(' | ') || String(err);
+}
+
+function fetchHtmlViaCurl(url) {
+  return new Promise((resolve, reject) => {
+    execFile('curl', [
+      '-k',
+      '-L',
+      '--fail',
+      '--silent',
+      '--show-error',
+      '--max-time',
+      '45',
+      '-A',
+      'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
+      '-H',
+      'Accept: text/html,application/xhtml+xml',
+      url,
+    ], { maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        err.message = [err.message, stderr && stderr.trim()].filter(Boolean).join(' | ');
+        reject(err);
+        return;
+      }
+      resolve(stdout);
+    });
+  });
+}
 
 const TIPOS = [
   { sigla: 'PL',   label: 'Proj. de Lei',                    form: 'Internet/LeiInt?OpenForm'       },
@@ -236,21 +272,27 @@ async function buscarTipo(tipo) {
   console.log(`  🔍 ${tipo.sigla}`);
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
-        'Accept': 'text/html,application/xhtml+xml',
-      },
-      signal: AbortSignal.timeout(30000),
-    });
+    let html;
 
-    if (!response.ok) {
-      console.error(`  ❌ HTTP ${response.status} para ${tipo.sigla}`);
-      falhasBusca += 1;
-      return [];
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      html = await response.text();
+    } catch (fetchErr) {
+      console.warn(`  ⚠️ Fetch Node falhou para ${tipo.sigla}; tentando curl: ${detalharErro(fetchErr)}`);
+      html = await fetchHtmlViaCurl(url);
     }
 
-    const html = await response.text();
     const lista = extrairProposicoesDaPagina(html, tipo);
     console.log(`  ✅ ${tipo.sigla}: ${lista.length} proposições encontradas`);
 
@@ -261,7 +303,7 @@ async function buscarTipo(tipo) {
 
     return lista;
   } catch (err) {
-    console.error(`  ❌ Erro ao buscar ${tipo.sigla}: ${err.message}`);
+    console.error(`  ❌ Erro ao buscar ${tipo.sigla}: ${detalharErro(err)}`);
     falhasBusca += 1;
     return [];
   }
