@@ -54,6 +54,9 @@ jobs:
           EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
           EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
+          CONTROLE03_API_USER: ${{ secrets.CONTROLE03_API_USER }}
+          CONTROLE03_API_PASS: ${{ secrets.CONTROLE03_API_PASS }}
+          CONTROLE03_STATE_URL: ${{ secrets.CONTROLE03_STATE_URL }}
           FIRJAN_EMAIL_DISABLED: "1"
           MONITOR_USER: ${{ secrets.MONITOR_USER }}
           MONITOR_PASS: ${{ secrets.MONITOR_PASS }}
