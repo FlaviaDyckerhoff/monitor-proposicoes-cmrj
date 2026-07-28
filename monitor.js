@@ -1117,7 +1117,7 @@ async function enviarEmail(novas) {
 
   if (pacoteSemanal.length > 0) {
     const pacoteEnriquecido = await enriquecerComMonitor(pacoteSemanal);
-    await sincronizarRadar03(novas);
+    await sincronizarRadar03(pacoteEnriquecido);
     await enviarEmail(pacoteEnriquecido);
     pacoteSemanal.forEach(p => idsVistos.add(p.id));
   } else {
