@@ -43,7 +43,7 @@ function fetchHtmlViaCurl(url) {
       '--silent',
       '--show-error',
       '--max-time',
-      '45',
+      '12',
       '-A',
       'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
       '-H',
@@ -287,7 +287,7 @@ async function buscarTipo(tipo) {
           'User-Agent': 'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
           'Accept': 'text/html,application/xhtml+xml',
         },
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(8000),
       });
 
       if (!response.ok) {
