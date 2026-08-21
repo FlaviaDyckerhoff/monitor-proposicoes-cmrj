@@ -1,7 +1,36 @@
+const FICHA_URL = process.env.FICHA_URL || 'https://doe.monitorlegislativo.com.br/ficha';
+
+function fichaEmailButtonHtml() {
+  return '<div style="background:#eef6ff;border:1px solid #c7ddf2;border-radius:6px;padding:11px 13px;margin:12px 0;color:#173d63;font-size:13px;line-height:1.45">' +
+    '<strong>Ficha</strong><br>' +
+    '<span>Cole o link oficial de uma proposição para criar ficha e acelerar a revisão/cadastro.</span><br>' +
+    '<a href="' + FICHA_URL + '" style="display:inline-block;background:#0f3d5c;color:white;text-decoration:none;border-radius:4px;padding:8px 11px;font-weight:bold;margin-top:8px">Criar ficha</a>' +
+    '</div>';
+}
+
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const nodemailer = require('nodemailer');
+let promoverInteresseClienteProposicao = (_item, atuais) => Array.isArray(atuais) ? atuais : [];
+try {
+  try {
+    ({ promoverInteresseClienteProposicao } = require('./client_interest_matcher_js'));
+  } catch (_localErr) {
+    ({ promoverInteresseClienteProposicao } = require('../../agents/pautas/client_interest_matcher_js'));
+  }
+} catch (err) {
+  console.warn('⚠️ Matcher cliente/palavra comum indisponível; usando destaque legado: ' + err.message);
+}
+
+function mlClientInterestContext() {
+  return {
+    uf: typeof CLIENT_INTEREST_UF !== 'undefined' ? CLIENT_INTEREST_UF : (process.env.CLIENT_INTEREST_UF || process.env.UF || ''),
+    municipio: typeof CLIENT_INTEREST_MUNICIPIO !== 'undefined' ? CLIENT_INTEREST_MUNICIPIO : (process.env.CLIENT_INTEREST_MUNICIPIO || process.env.MUNICIPIO || ''),
+    casa: typeof CASA_RADAR03 !== 'undefined' ? CASA_RADAR03 : (process.env.CASA_RADAR03 || process.env.CASA || ''),
+  };
+}
+
 
 const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
 const FIRJAN_DESTINO = process.env.FIRJAN_DESTINO || EMAIL_DESTINO || 'tramitacao@monitorlegislativo.com.br';
@@ -9,6 +38,9 @@ const FIRJAN_ASSUNTO_PREFIXO = process.env.FIRJAN_ASSUNTO_PREFIXO || '';
 const FIRJAN_EMAIL_DISABLED = process.env.FIRJAN_EMAIL_DISABLED === '1';
 const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
+const EXPORT_NOVAS_JSON = process.env.EXPORT_NOVAS_JSON || '';
+const EXPORT_NOVAS_NO_EMAIL = process.env.EXPORT_NOVAS_NO_EMAIL === '1';
+const NO_STATE_UPDATE = process.env.NO_STATE_UPDATE === '1';
 const CONTROLE03_FORCE_LATEST = String(process.env.CONTROLE03_FORCE_LATEST || '').trim() === '1';
 const RADAR03_URL = process.env.RADAR03_URL || 'https://doe.monitorlegislativo.com.br/controle03/';
 const CASA_RADAR03 = process.env.CASA_RADAR03 || 'RJ - Rio de Janeiro';
@@ -89,6 +121,19 @@ function carregarEstado() {
 
 function salvarEstado(estado) {
   fs.writeFileSync(ARQUIVO_ESTADO, JSON.stringify(estado, null, 2));
+}
+
+function exportarNovas(pathDestino, novas) {
+  if (!pathDestino) return;
+  fs.mkdirSync(path.dirname(pathDestino), { recursive: true });
+  fs.writeFileSync(pathDestino, JSON.stringify({
+    casa: 'CMRJ',
+    gerado_em: new Date().toISOString(),
+    intervalo: obterIntervaloSemanaBRT(),
+    total: novas.length,
+    proposicoes: novas,
+  }, null, 2));
+  console.log('📦 Export JSON CMRJ: ' + pathDestino + ' · ' + novas.length + ' proposição(ões)');
 }
 
 // ─── Scraping ─────────────────────────────────────────────────────────────────
@@ -620,7 +665,7 @@ const CLIENTES_NOMES_PROPRIOS = [
   'Wild Fork', 'Ajinomoto', 'Vibra', 'Vibra Energia',
   'BR Distribuidora', 'Raízen', 'Raizen', 'Mindlab',
   'ABVTEX', 'Semove', 'Barcas', 'Seta',
-  'Nova Infra', 'BRT', 'Consórcio Maracanã', 'Consorcio Maracana',
+  'Nova Infra', 'Consórcio Maracanã', 'Consorcio Maracana',
   'Maracanã', 'Maracana'
 ];
 
@@ -651,7 +696,11 @@ function clientesCitadosNaProposicao(p) {
   if (interesseMaracana && !achados.some(a => /maracan/i.test(normalizarTextoCliente(a)))) {
     achados.push('Consórcio Maracanã (interesse por ementa: ' + interesseMaracana + ')');
   }
-  return achados;
+  const interesseSemove = detectarInteresseSemoveBrt(texto);
+  if (interesseSemove && !achados.some(a => /semove/i.test(normalizarTextoCliente(a)))) {
+    achados.push('Semove (interesse por ementa: ' + interesseSemove + ')');
+  }
+  return promoverInteresseClienteProposicao(p, achados, mlClientInterestContext());
 }
 
 function normalizarTextoCliente(texto) {
@@ -659,6 +708,23 @@ function normalizarTextoCliente(texto) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+}
+
+function detectarInteresseSemoveBrt(texto) {
+  const t = normalizarTextoCliente(texto);
+  if (!/\bbrt\b/.test(t)) return '';
+  const contextoTransporte = [
+    /\bsemove\b/,
+    /\bmobilidade urbana\b/,
+    /\btransporte coletivo\b/,
+    /\bonibus\b/,
+    /\bcorredor(es)?\b/,
+    /\bterminal(is)?\b/,
+    /\bsistema de transporte\b/,
+    /\bconcess(ao|oes)\b/,
+    /\blinha(s)? municipal(is)?\b/,
+  ];
+  return contextoTransporte.some(re => re.test(t)) ? 'BRT' : '';
 }
 
 function detectarInteresseConsorcioMaracana(texto) {
@@ -1090,7 +1156,7 @@ async function enviarEmail(novas) {
     from: '"Monitor Legislativo" <' + EMAIL_REMETENTE + '>',
     to: destinatario,
     subject: assuntoEmailClienteCitado(novas, assunto),
-    html,
+    html: fichaEmailButtonHtml() + html,
     attachments: [
       ...(fs.existsSync(LOGO_PATH) ? [{ filename: 'monitor-logo-white.png', path: LOGO_PATH, cid: 'monitorLogo' }] : []),
       ...(!envioInterno && fs.existsSync(FIRJAN_LOGO_PATH) ? [{ filename: 'firjan-logo-white.png', path: FIRJAN_LOGO_PATH, cid: 'firjanLogo' }] : []),
@@ -1137,15 +1203,25 @@ async function enviarEmail(novas) {
 
   if (pacoteSemanal.length > 0) {
     const pacoteEnriquecido = await enriquecerComMonitor(pacoteSemanal);
-    await sincronizarRadar03(pacoteEnriquecido);
-    await enviarEmail(pacoteEnriquecido);
+    exportarNovas(EXPORT_NOVAS_JSON, pacoteEnriquecido);
+    if (!EXPORT_NOVAS_NO_EMAIL) {
+      await sincronizarRadar03(pacoteEnriquecido);
+      await enviarEmail(pacoteEnriquecido);
+    } else {
+      console.log('📌 Exportação sem email e sem sincronização Radar 03.');
+    }
     pacoteSemanal.forEach(p => idsVistos.add(p.id));
   } else {
     console.log('✅ Sem proposições na semana atual. Nada a enviar.');
+    exportarNovas(EXPORT_NOVAS_JSON, []);
   }
 
   elegiveis.forEach(p => idsVistos.add(p.id));
   estado.proposicoes_vistas = Array.from(idsVistos);
   estado.ultima_execucao = new Date().toISOString();
-  salvarEstado(estado);
+  if (NO_STATE_UPDATE) {
+    console.log('📌 Estado preservado por NO_STATE_UPDATE=1.');
+  } else {
+    salvarEstado(estado);
+  }
 })();
