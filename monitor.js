@@ -52,7 +52,10 @@ const CONTROLE03_BASIC_AUTH = process.env.CONTROLE03_BASIC_AUTH || '';
 const ARQUIVO_ESTADO = 'estado.json';
 const BACKFILL_DAYS = Number(process.env.BACKFILL_DAYS || '10');
 const IGNORE_STATE = process.env.IGNORE_STATE === '1';
-const BASE_URL = 'https://aplicnt.camara.rj.gov.br/APL/Legislativos/scpro.nsf';
+const BASE_URL = process.env.CMRJ_BASE_URL || 'https://aplicnt.camara.rj.gov.br/APL/Legislativos/scpro.nsf';
+const FETCH_TIMEOUT_MS = Number(process.env.CMRJ_FETCH_TIMEOUT_MS || '8000');
+const CURL_MAX_TIME_SECONDS = Number(process.env.CMRJ_CURL_MAX_TIME_SECONDS || '12');
+const FETCH_DELAY_MS = Number(process.env.CMRJ_FETCH_DELAY_MS || '1500');
 const LOGO_PATH = path.join(__dirname, 'assets', 'monitor-logo-white.png');
 const FIRJAN_LOGO_PATH = path.join(__dirname, 'assets', 'firjan-logo-white.png');
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -76,7 +79,7 @@ function fetchHtmlViaCurl(url) {
       '--silent',
       '--show-error',
       '--max-time',
-      '12',
+      String(CURL_MAX_TIME_SECONDS),
       '-A',
       'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
       '-H',
@@ -333,7 +336,7 @@ async function buscarTipo(tipo) {
           'User-Agent': 'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
           'Accept': 'text/html,application/xhtml+xml',
         },
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -367,7 +370,9 @@ async function buscarTodasProposicoes() {
   for (const tipo of TIPOS) {
     const lista = await buscarTipo(tipo);
     todas.push(...lista);
-    await new Promise(r => setTimeout(r, 1500));
+    if (FETCH_DELAY_MS > 0) {
+      await new Promise(r => setTimeout(r, FETCH_DELAY_MS));
+    }
   }
   return todas;
 }
@@ -1178,13 +1183,16 @@ async function enviarEmail(novas) {
   console.log(`\n📋 Buscando ${TIPOS.length} tipos de proposições...`);
   const todas = await buscarTodasProposicoes();
 
+  if (falhasBusca > 0) {
+    console.error(`❌ Fonte CMRJ indisponível ou incompleta: ${falhasBusca}/${TIPOS.length} tipo(s) falharam. Abortando sem email e sem alterar estado.`);
+    process.exitCode = 1;
+    return;
+  }
+
   if (todas.length === 0) {
-    console.log('⚠️ Nenhuma proposição encontrada. Verifique o portal.');
-    if (falhasBusca > 0) {
-      console.warn(`⚠️ Fonte indisponível: ${falhasBusca} tipo(s) tiveram erro de busca. Encerrando sem alterar estado para evitar alerta vermelho repetido.`);
-      process.exit(0);
-    }
-    process.exit(0);
+    console.error('❌ Fonte CMRJ respondeu sem nenhuma proposição. Abortando sem email e sem alterar estado.');
+    process.exitCode = 1;
+    return;
   }
 
   // Filtro A: só ano corrente

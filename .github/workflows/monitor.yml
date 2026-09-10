@@ -14,6 +14,10 @@ on:
         description: "Ignorar estado salvo e reenviar o período (1=sim)"
         required: false
         default: ""
+      safe_validation:
+        description: "Validar fonte sem email, Radar 03 ou alteração de estado (1=sim)"
+        required: false
+        default: "1"
 
 concurrency:
   group: monitor-proposicoes-cmrj
@@ -21,7 +25,7 @@ concurrency:
 
 jobs:
   monitorar:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, cmrj]
     permissions:
       contents: write
 
@@ -63,12 +67,14 @@ jobs:
           FIRJAN_CLIENTE_ID: "57"
           BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '10' }}
           IGNORE_STATE: ${{ github.event.inputs.ignore_state }}
+          EXPORT_NOVAS_NO_EMAIL: ${{ github.event.inputs.safe_validation == '1' && '1' || '' }}
+          NO_STATE_UPDATE: ${{ github.event.inputs.safe_validation == '1' && '1' || '' }}
         run: |
           export NODE_TLS_REJECT_UNAUTHORIZED=0
           node monitor.js
 
       - name: Salvar estado no repositório
-        if: steps.calendario.outputs.skip != 'true'
+        if: steps.calendario.outputs.skip != 'true' && github.event.inputs.safe_validation != '1'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
