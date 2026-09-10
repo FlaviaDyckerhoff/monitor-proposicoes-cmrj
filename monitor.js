@@ -41,6 +41,9 @@ const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const EXPORT_NOVAS_JSON = process.env.EXPORT_NOVAS_JSON || '';
 const EXPORT_NOVAS_NO_EMAIL = process.env.EXPORT_NOVAS_NO_EMAIL === '1';
 const NO_STATE_UPDATE = process.env.NO_STATE_UPDATE === '1';
+const SYNC_RADAR03_ONLY = process.env.SYNC_RADAR03_ONLY === '1';
+const BACKFILL_ALL_PAGES = process.env.BACKFILL_ALL_PAGES === '1';
+const MAX_PAGINAS_TIPO = Number(process.env.MAX_PAGINAS_TIPO || 100);
 const CONTROLE03_FORCE_LATEST = String(process.env.CONTROLE03_FORCE_LATEST || '').trim() === '1';
 const RADAR03_URL = process.env.RADAR03_URL || 'https://doe.monitorlegislativo.com.br/controle03/';
 const CASA_RADAR03 = process.env.CASA_RADAR03 || 'RJ - Rio de Janeiro';
@@ -324,43 +327,70 @@ function extrairProposicoesDaPagina(html, tipo) {
 }
 
 async function buscarTipo(tipo) {
-  const url = `${BASE_URL}/${tipo.form}`;
+  let url = `${BASE_URL}/${tipo.form}`;
   console.log(`  🔍 ${tipo.sigla}`);
+  const proposicoes = [];
+  const vistos = new Set();
+  const paginasVisitadas = new Set();
 
   try {
-    let html;
+    for (let pagina = 0; pagina < MAX_PAGINAS_TIPO && url && !paginasVisitadas.has(url); pagina += 1) {
+      paginasVisitadas.add(url);
+      let html;
 
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
-          'Accept': 'text/html,application/xhtml+xml',
-        },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      });
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; monitor-cmrj/1.0)',
+            'Accept': 'text/html,application/xhtml+xml',
+          },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        html = await response.text();
+      } catch (fetchErr) {
+        console.warn(`  ⚠️ Fetch Node falhou para ${tipo.sigla}; tentando curl: ${detalharErro(fetchErr)}`);
+        html = await fetchHtmlViaCurl(url);
       }
 
-      html = await response.text();
-    } catch (fetchErr) {
-      console.warn(`  ⚠️ Fetch Node falhou para ${tipo.sigla}; tentando curl: ${detalharErro(fetchErr)}`);
-      html = await fetchHtmlViaCurl(url);
+      const lista = extrairProposicoesDaPagina(html, tipo);
+      if (lista.length === 0) {
+        throw new Error('HTTP respondeu sem proposições parseáveis');
+      }
+      for (const item of lista) {
+        if (vistos.has(item.id)) continue;
+        vistos.add(item.id);
+        proposicoes.push(item);
+      }
+
+      if (!BACKFILL_ALL_PAGES || deveExcluirDoEmail(tipo.sigla)) break;
+      const datasValidas = lista.map(item => parseDataBR(item.data)).filter(Boolean);
+      const limiteRecente = obterLimiteRecenteBRT(BACKFILL_DAYS).inicio;
+      if (datasValidas.length && Math.max(...datasValidas) < limiteRecente) break;
+      const atual = Number((url.match(/[?&]Start=(\d+)/i) || [])[1] || 0);
+      const candidatos = [];
+      const regex = /href=["']([^"']*?[?&](?:amp;)?Start=(\d+)[^"']*)["']/gi;
+      let match;
+      while ((match = regex.exec(html)) !== null) {
+        const start = Number(match[2]);
+        if (Number.isFinite(start) && start > atual) candidatos.push({ href: match[1], start });
+      }
+      candidatos.sort((a, b) => a.start - b.start);
+      url = candidatos.length ? absolutizarUrl(candidatos[0].href) : '';
     }
 
-    const lista = extrairProposicoesDaPagina(html, tipo);
-    if (lista.length === 0) {
-      throw new Error('HTTP respondeu sem proposições parseáveis');
-    }
-    console.log(`  ✅ ${tipo.sigla}: ${lista.length} proposições encontradas`);
+    console.log(`  ✅ ${tipo.sigla}: ${proposicoes.length} proposições encontradas em ${paginasVisitadas.size} página(s)`);
 
-    if (lista.length > 0) {
-      const p = lista[0];
+    if (proposicoes.length > 0) {
+      const p = proposicoes[0];
       console.log(`     Exemplo: ${p.numero} | ${p.data} | ${p.autor.substring(0, 30)} | ${p.ementa.substring(0, 60)}...`);
     }
 
-    return lista;
+    return proposicoes;
   } catch (err) {
     console.error(`  ❌ Erro ao buscar ${tipo.sigla}: ${detalharErro(err)}`);
     falhasBusca += 1;
@@ -985,7 +1015,7 @@ function radar03AgruparNovidades(novas) {
 
 async function sincronizarRadar03(novas) {
   const resumo = radar03AgruparNovidades(novas);
-  if (!resumo.length) return;
+  if (!resumo.length) return true;
   try {
     const getResp = await fetch(CONTROLE03_STATE_URL, { headers: radar03AuthHeaders() });
     if (!getResp.ok) throw new Error('GET ' + getResp.status);
@@ -1058,8 +1088,10 @@ async function sincronizarRadar03(novas) {
     });
     if (!postResp.ok) throw new Error('POST ' + postResp.status);
     console.log('✅ Radar 03 sincronizado: ' + CASA_RADAR03 + ' · ' + resumo.map(item => item.tipo + ' ' + item.numero + '/' + item.ano).join(' | '));
+    return true;
   } catch (err) {
     console.warn('⚠️ Não foi possível sincronizar o Radar 03 automaticamente: ' + err.message);
+    return false;
   }
 }
 
@@ -1215,7 +1247,15 @@ async function enviarEmail(novas) {
   if (pacoteSemanal.length > 0) {
     const pacoteEnriquecido = await enriquecerComMonitor(pacoteSemanal);
     exportarNovas(EXPORT_NOVAS_JSON, pacoteEnriquecido);
-    if (!EXPORT_NOVAS_NO_EMAIL) {
+    if (SYNC_RADAR03_ONLY) {
+      const sincronizado = await sincronizarRadar03(pacoteEnriquecido);
+      if (!sincronizado) {
+        console.error('❌ Backfill da fila interna falhou. Abortando sem alterar estado.');
+        process.exitCode = 1;
+        return;
+      }
+      console.log('📌 Fila interna sincronizada sem email.');
+    } else if (!EXPORT_NOVAS_NO_EMAIL) {
       await sincronizarRadar03(pacoteEnriquecido);
       await enviarEmail(pacoteEnriquecido);
     } else {

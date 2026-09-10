@@ -18,6 +18,14 @@ on:
         description: "Validar fonte sem email, Radar 03 ou alteração de estado (1=sim)"
         required: false
         default: "1"
+      backfill_all_pages:
+        description: "Paginar todo o ano corrente (1=sim)"
+        required: false
+        default: ""
+      queue_backfill:
+        description: "Sincronizar somente fila interna, sem email (1=sim)"
+        required: false
+        default: ""
 
 concurrency:
   group: monitor-proposicoes-cmrj
@@ -65,16 +73,18 @@ jobs:
           MONITOR_USER: ${{ secrets.MONITOR_USER }}
           MONITOR_PASS: ${{ secrets.MONITOR_PASS }}
           FIRJAN_CLIENTE_ID: "57"
-          BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '10' }}
+          BACKFILL_DAYS: ${{ github.event.inputs.backfill_all_pages == '1' && '365' || github.event.inputs.backfill_days || '10' }}
           IGNORE_STATE: ${{ github.event.inputs.ignore_state }}
-          EXPORT_NOVAS_NO_EMAIL: ${{ github.event.inputs.safe_validation == '1' && '1' || '' }}
-          NO_STATE_UPDATE: ${{ github.event.inputs.safe_validation == '1' && '1' || '' }}
+          BACKFILL_ALL_PAGES: ${{ github.event.inputs.backfill_all_pages }}
+          SYNC_RADAR03_ONLY: ${{ github.event.inputs.queue_backfill }}
+          EXPORT_NOVAS_NO_EMAIL: ${{ (github.event.inputs.safe_validation == '1' || github.event.inputs.queue_backfill == '1') && '1' || '' }}
+          NO_STATE_UPDATE: ${{ (github.event.inputs.safe_validation == '1' && github.event.inputs.queue_backfill != '1') && '1' || '' }}
         run: |
           export NODE_TLS_REJECT_UNAUTHORIZED=0
           node monitor.js
 
       - name: Salvar estado no repositório
-        if: steps.calendario.outputs.skip != 'true' && github.event.inputs.safe_validation != '1'
+        if: steps.calendario.outputs.skip != 'true' && (github.event.inputs.safe_validation != '1' || github.event.inputs.queue_backfill == '1')
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
