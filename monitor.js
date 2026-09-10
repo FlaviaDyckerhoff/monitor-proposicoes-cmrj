@@ -350,6 +350,9 @@ async function buscarTipo(tipo) {
     }
 
     const lista = extrairProposicoesDaPagina(html, tipo);
+    if (lista.length === 0) {
+      throw new Error('HTTP respondeu sem proposições parseáveis');
+    }
     console.log(`  ✅ ${tipo.sigla}: ${lista.length} proposições encontradas`);
 
     if (lista.length > 0) {
