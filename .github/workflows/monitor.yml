@@ -17,7 +17,7 @@ on:
       safe_validation:
         description: "Validar fonte sem email, Radar 03 ou alteração de estado (1=sim)"
         required: false
-        default: "1"
+        default: ""
       backfill_all_pages:
         description: "Paginar todo o ano corrente (1=sim)"
         required: false
