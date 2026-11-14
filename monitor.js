@@ -1,3 +1,4 @@
+const lacunas03 = require('./lacunas03');
 const mlPropsPriority = require('./priority_terms');
 
 const FICHA_URL = process.env.FICHA_URL || 'https://doe.monitorlegislativo.com.br/ficha';
@@ -1034,6 +1035,7 @@ async function sincronizarRadar03(novas) {
         const base = Number.parseInt(String(item.base || baseAtual || 0), 10) || 0;
         item.tipo = det.tipo;
         item.mon = det.numeroInt;
+        item.ano = String(det.ano || item.ano || '');
         item.delta = det.numeroInt === base ? 0 : 1;
         item.sentido = det.numeroInt === base ? 'bate com o controle' : 'captado individualmente na fonte';
         item.fluxo = item.delta ? 'nao_consultado' : (item.fluxo || 'revisado');
@@ -1168,7 +1170,7 @@ async function enviarEmail(novas) {
     '</div></div>'
   ].join('');
 
-  await transporter.sendMail({
+  await lacunas03.sendMail.bind(null, transporter, {casa: CASA_RADAR03, stateUrl: CONTROLE03_STATE_URL, headers: radar03AuthHeaders})({
     from: '"Monitor Legislativo" <' + EMAIL_REMETENTE + '>',
     to: destinatario,
     subject: assuntoEmailClienteCitado(novas, assunto),
